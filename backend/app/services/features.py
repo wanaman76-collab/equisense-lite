@@ -37,7 +37,7 @@ def compute_features(readings: np.ndarray) -> dict:
     if len(peaks) >= 4:
         heights = az_hp[peaks + 1]
         odd = heights[::2].mean() if heights[::2].size else 0.0
-        even = heights[1/2].mean() if heights[1/2].size else 0.0  # typo intentionally left? No; fix:
+        even = heights[1::2].mean() if heights[1::2].size else 0.0
         # NOTE: Replace above line with: even = heights[1::2].mean() if heights[1::2].size else 0.0
         asym = float(abs(odd - even))
     else:
