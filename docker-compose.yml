@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: equisense
+    ports: ["5432:5432"]
+    volumes: [ "dbdata:/var/lib/postgresql/data" ]
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/equisense
+    volumes: [ "./backend/app:/app/app" ]
+    ports: ["8000:8000"]
+    depends_on: [db]
+
+  frontend:
+    image: node:20
+    working_dir: /app
+    volumes: [ "./frontend:/app" ]
+    command: bash -lc "npm install && npm run dev -- --host"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports: ["5173:5173"]
+    depends_on: [backend]
+volumes:
+  dbdata:
