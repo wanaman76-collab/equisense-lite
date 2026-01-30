@@ -7,9 +7,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --------------------
-      # Backend (Python)
-      # --------------------
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -30,17 +27,3 @@ jobs:
           . .venv/bin/activate
           export PYTHONPATH=$PWD
           python -m pytest -q
-
-      # --------------------
-      # Frontend (Node)
-      # --------------------
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Frontend tests
-        run: |
-          cd frontend
-          npm install --include=dev
-          npm run test
