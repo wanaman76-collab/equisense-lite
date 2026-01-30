@@ -52,10 +52,18 @@ def get_anomalies(session_id: int, db: Session = Depends(get_db)):
 
 @router.post("/{session_id}/compute")
 def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)):
-    q = db.execute(select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms)).where(SensorReading.session_id == session_id))
+    q = db.execute(
+        select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms))
+        .where(SensorReading.session_id == session_id)
+    )
     first_ts, last_ts = q.first()
-    if not first_ts or not last_ts:
+    # Only treat missing values as None; 0 is a valid timestamp
+    if first_ts is None or last_ts is None:
         return {"windows": 0, "anomalies": 0}
+
+    ranges = window_ranges(first_ts, last_ts)
+    created = 0
+    ...
 
     ranges = window_ranges(first_ts, last_ts)
     created = 0
