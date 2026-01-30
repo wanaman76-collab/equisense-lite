@@ -27,5 +27,5 @@ jobs:
       - name: Frontend tests
         run: |
           cd frontend
-          npm ci || npm install
+          npm install
           npm run test
