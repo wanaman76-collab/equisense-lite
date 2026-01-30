@@ -5,16 +5,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Backend tests
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: |
+      - name: Install backend deps and pytest
+        run: |
           cd backend
           python -m venv .venv
           . .venv/bin/activate
           pip install -r requirements.txt
+          pip install pytest
+      - name: Run backend tests
+        run: |
+          cd backend
+          . .venv/bin/activate
           pytest -q
+
       - name: Frontend tests
         run: |
           cd frontend
