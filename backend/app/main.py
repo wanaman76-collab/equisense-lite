@@ -20,11 +20,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Expected token for protected endpoints.
-# In production set API_TOKEN in the environment. For local dev we use a default.
-EXPECTED_API_TOKEN = os.getenv("API_TOKEN", "dev-token")
-
-
 @app.middleware("http")
 async def token_guard(request, call_next):
     path = request.url.path
@@ -37,7 +32,8 @@ async def token_guard(request, call_next):
     if not token:
         return JSONResponse({"detail": "Missing X-API-Token"}, status_code=401)
 
-    if token != EXPECTED_API_TOKEN:
+    expected = os.getenv("API_TOKEN", "dev-token")
+    if token != expected:
         return JSONResponse({"detail": "Invalid X-API-Token"}, status_code=401)
 
     return await call_next(request)
