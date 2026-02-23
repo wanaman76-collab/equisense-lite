@@ -18,3 +18,8 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local SQLite artifacts (generated at runtime)
+backend/equisense.db
+backend/*.db
+*.db
