@@ -1,42 +1,55 @@
-import pytest
+import os
+
 from fastapi.testclient import TestClient
-from your_app import app  # Adjust the import according to your app structure
+
+from app.main import app
 
 client = TestClient(app)
 
-API_TOKEN = "your_api_token"
+TOKEN = os.getenv("API_TOKEN", "dev-token")
+headers = {"X-API-Token": TOKEN}
 
-# Using X-API-Token for authentication
-headers = {"X-API-Token": API_TOKEN}
 
-# Test /health endpoint
+def test_health_is_public():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
 
-def test_health():
-    response = client.get("/health", headers=headers)
-    assert response.status_code == 200
-    assert response.json() == {"status": "healthy"}
 
-# Test /sessions endpoint
+def test_missing_token_returns_401():
+    r = client.get("/sessions")
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Missing X-API-Token"
 
-def test_sessions():
-    response = client.get("/sessions", headers=headers)
-    assert response.status_code == 200
 
-# Test /ingest endpoint
+def test_invalid_token_returns_401():
+    r = client.get("/sessions", headers={"X-API-Token": "wrong-token"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Invalid X-API-Token"
 
-def test_ingest():
-    data = {"session_data": "data_here"}
-    response = client.post("/ingest", headers=headers, json=data)
-    assert response.status_code == 201
 
-# Test /sessions/999999/features endpoint
+def test_create_session_missing_horse_id_returns_422():
+    r = client.post("/sessions", json={"surface": "arena"}, headers=headers)
+    assert r.status_code == 422
 
-def test_session_features():
-    response = client.get("/sessions/999999/features", headers=headers)
-    assert response.status_code == 200
 
-# Test /sessions/999999/anomalies endpoint
+def test_ingest_invalid_session_returns_404():
+    payload = {
+        "session_id": 999999,
+        "readings": [{"ts_ms": 0, "ax": 0.1, "ay": 0.0, "az": 0.2, "gx": 0.01, "gy": 0.02, "gz": 0.03}],
+    }
+    r = client.post("/ingest", json=payload, headers=headers)
+    assert r.status_code == 404
+    assert r.json()["detail"] == "Session not found"
 
-def test_session_anomalies():
-    response = client.get("/sessions/999999/anomalies", headers=headers)
-    assert response.status_code == 200
+
+def test_features_invalid_session_returns_200_empty_list():
+    r = client.get("/sessions/999999/features", headers=headers)
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_anomalies_invalid_session_returns_200_empty_list():
+    r = client.get("/sessions/999999/anomalies", headers=headers)
+    assert r.status_code == 200
+    assert r.json() == []
