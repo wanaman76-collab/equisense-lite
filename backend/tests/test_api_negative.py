@@ -53,3 +53,14 @@ def test_anomalies_invalid_session_returns_200_empty_list():
     r = client.get("/sessions/999999/anomalies", headers=headers)
     assert r.status_code == 200
     assert r.json() == []
+
+
+def test_duplicate_horse_returns_409():
+    import uuid
+    unique_name = f"TestHorse_{uuid.uuid4().hex[:8]}"
+    r1 = client.post("/horses", json={"name": unique_name}, headers=headers)
+    assert r1.status_code == 201, r1.text
+
+    r2 = client.post("/horses", json={"name": unique_name}, headers=headers)
+    assert r2.status_code == 409
+    assert "already exists" in r2.json()["detail"]
