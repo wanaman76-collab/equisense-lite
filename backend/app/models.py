@@ -62,6 +62,8 @@ class SensorReading(Base):
 
     session: Mapped["Session"] = relationship(back_populates="readings")
 
+    __table_args__ = (UniqueConstraint("session_id", "ts_ms", name="uq_reading_session_ts"),)
+
 class FeatureWindow(Base):
     __tablename__ = "feature_windows"
     id: Mapped[int] = mapped_column(primary_key=True)
