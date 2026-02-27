@@ -7,6 +7,10 @@ class HorseCreate(BaseModel):
     name: str
     notes: Optional[str] = None
 
+class HorseUpdate(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+
 class HorseOut(BaseModel):
     id: int
     name: str
@@ -63,5 +67,25 @@ class AnomalyOut(BaseModel):
     severity: str
     details_json: dict | None
     created_at: datetime
+    class Config:
+        from_attributes = True
+
+class AnomalyOutEmbed(BaseModel):
+    score: float
+    severity: str
+    method: str
+    class Config:
+        from_attributes = True
+
+class FeatureWindowExport(BaseModel):
+    id: int
+    ts_start: int
+    ts_end: int
+    cadence_spm: float | None
+    stride_var: float | None
+    asymmetry_proxy: float | None
+    energy: float | None
+    quality_flags: str | None
+    anomaly: AnomalyOutEmbed | None
     class Config:
         from_attributes = True

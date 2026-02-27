@@ -1,13 +1,16 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from typing import List
 from ..db import get_db, Base, engine
 from ..models import Session as SessionModel, Horse, SessionStatus, FeatureWindow, AnomalyEvent, SensorReading, Baseline
-from ..schemas import SessionCreate, SessionOut, FeatureWindowOut, AnomalyOut
+from ..schemas import SessionCreate, SessionOut, FeatureWindowOut, AnomalyOut, FeatureWindowExport
 from ..services.features import window_ranges, compute_features
 from ..services.anomaly import robust_score, severity_from_score
 from sqlalchemy import select, func
+import csv
+import io
 import numpy as np
 from datetime import datetime
 
@@ -49,6 +52,42 @@ def get_anomalies(session_id: int, db: Session = Depends(get_db)):
         select(AnomalyEvent).join(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(AnomalyEvent.created_at.asc())
     )
     return [r[0] for r in q.all()]
+
+def _get_windows_for_export(session_id: int, db: Session) -> List[FeatureWindowExport]:
+    q = db.execute(
+        select(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(FeatureWindow.ts_start.asc())
+    )
+    return [r[0] for r in q.all()]
+
+@router.get("/{session_id}/export.json", response_model=List[FeatureWindowExport])
+def export_json(session_id: int, db: Session = Depends(get_db)):
+    return _get_windows_for_export(session_id, db)
+
+@router.get("/{session_id}/export.csv")
+def export_csv(session_id: int, db: Session = Depends(get_db)):
+    windows = _get_windows_for_export(session_id, db)
+    output = io.StringIO()
+    fieldnames = ["id", "ts_start", "ts_end", "cadence_spm", "stride_var", "asymmetry_proxy", "energy", "quality_flags",
+                  "anomaly_score", "anomaly_severity", "anomaly_method"]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+    for w in windows:
+        anom = w.anomaly
+        writer.writerow({
+            "id": w.id,
+            "ts_start": w.ts_start,
+            "ts_end": w.ts_end,
+            "cadence_spm": w.cadence_spm,
+            "stride_var": w.stride_var,
+            "asymmetry_proxy": w.asymmetry_proxy,
+            "energy": w.energy,
+            "quality_flags": w.quality_flags,
+            "anomaly_score": anom.score if anom else "",
+            "anomaly_severity": anom.severity if anom else "",
+            "anomaly_method": anom.method if anom else "",
+        })
+    return Response(content=output.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=session_{session_id}_windows.csv"})
 
 @router.post("/{session_id}/compute")
 def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)):
