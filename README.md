@@ -73,6 +73,61 @@ pytest tests/ -v
 
 ---
 
+## iOS App — EquiSenseLiteRecorder
+
+A native SwiftUI iPhone app for recording horse-mounted IMU data (accelerometer + gyroscope at 50 Hz) and uploading it to the EquiSense Lite backend.
+
+### Location
+
+```
+ios/EquiSenseLiteRecorder/EquiSenseLiteRecorder.xcodeproj
+```
+
+### Requirements
+
+- macOS with **Xcode 15+** (free from the Mac App Store)
+- An iPhone running **iOS 16+**
+- A running EquiSense Lite backend (local or Render)
+
+### Build & Run (Xcode, no App Store needed)
+
+1. Open the project in Xcode:
+   ```bash
+   open ios/EquiSenseLiteRecorder/EquiSenseLiteRecorder.xcodeproj
+   ```
+
+2. Connect your iPhone via USB (or use the Simulator for UI testing — CoreMotion will not produce real data in the Simulator).
+
+3. In Xcode, select your iPhone as the run destination, then press **▶ Run** (⌘R).
+
+4. The first time you run on a physical device, go to **Settings → General → VPN & Device Management** on the iPhone and trust your developer certificate.
+
+### Required iOS Permissions
+
+The following key is declared in `Info.plist` and will trigger a system permission prompt on first motion access:
+
+| Key | Purpose |
+|-----|---------|
+| `NSMotionUsageDescription` | Allows the app to access accelerometer & gyroscope data via CoreMotion |
+
+No additional entitlements or provisioning profiles are needed for personal/development use with automatic signing.
+
+### App Flow
+
+1. **Settings tab** — Enter your backend API Base URL (e.g., `https://your-app.onrender.com`) and API Token. Both are saved in `UserDefaults`.
+2. **Horse & Session tab** — Create a new horse or pick an existing one, then tap **Start Session**.
+3. **Recording tab** — Tap **Start Recording** to begin 50 Hz IMU capture. Elapsed time and sample count are shown live. Tap **Stop Recording** to end; samples are saved to a local JSON Lines file in the app's Documents directory.
+4. **Upload tab** — Tap **Upload to Server** to batch-upload samples (200/batch with up to 3 retries per batch). After a successful upload, tap **Compute Analysis** to trigger anomaly detection on the backend.
+
+### Notes
+
+- Sampling rate: **50 Hz** (using `CMMotionManager.deviceMotionUpdateInterval = 1/50`).
+- Timestamps: epoch-ms anchored at session start, offset by CoreMotion uptime for monotonic ordering.
+- Offline-first: data is stored locally during recording and uploaded after stop.
+- The app handles **409 Duplicate** responses from the backend gracefully (treated as success).
+
+---
+
 ## Deployment
 
 ### Backend → Render (free tier)

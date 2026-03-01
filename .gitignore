@@ -23,3 +23,13 @@ Thumbs.db
 backend/equisense.db
 backend/*.db
 *.db
+
+# Xcode / iOS
+xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+ios/EquiSenseLiteRecorder/build/
