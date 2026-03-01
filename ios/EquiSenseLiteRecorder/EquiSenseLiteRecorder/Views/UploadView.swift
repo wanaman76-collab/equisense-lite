@@ -4,6 +4,8 @@ struct UploadView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var recordingStore: RecordingStore
 
+    private let uploadBatchSize = 200
+
     @State private var isUploading = false
     @State private var uploadedCount = 0
     @State private var totalCount = 0
@@ -104,7 +106,7 @@ struct UploadView: View {
             let stored = try await client.uploadAll(
                 sessionId: sessionId,
                 samples: samples,
-                batchSize: 200
+                batchSize: uploadBatchSize
             ) { sent, _ in
                 Task { @MainActor in
                     uploadedCount = sent

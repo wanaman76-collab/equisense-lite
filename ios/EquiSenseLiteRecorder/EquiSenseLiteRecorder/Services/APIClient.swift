@@ -114,7 +114,7 @@ class APIClient {
                 do {
                     let resp = try await uploadBatch(sessionId: sessionId, samples: chunk)
                     totalStored += resp.stored
-                    onProgress((index + 1) * batchSize, samples.count)
+                    onProgress(min((index + 1) * batchSize, samples.count), samples.count)
                     lastError = nil
                     break
                 } catch {
