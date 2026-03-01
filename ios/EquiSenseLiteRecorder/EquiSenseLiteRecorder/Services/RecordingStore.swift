@@ -10,8 +10,9 @@ class RecordingStore: ObservableObject {
     @Published var isUploaded: Bool = false
 
     private var fileURL: URL? {
+        guard let sid = sessionId else { return nil }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        return docs?.appendingPathComponent("recording_\(sessionId ?? 0).jsonl")
+        return docs?.appendingPathComponent("recording_\(sid).jsonl")
     }
 
     func startRecording(sessionId: Int, horseName: String) {
