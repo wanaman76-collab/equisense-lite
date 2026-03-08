@@ -14,14 +14,19 @@ Base.metadata.create_all(bind=engine)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["https://equisense-lite.netlify.app", "http://localhost:5173", "http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 @app.middleware("http")
 async def token_guard(request, call_next):
+    # Allow CORS preflight requests (they don't include auth headers)
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     path = request.url.path
 
     # Public endpoints (no token required)
