@@ -14,6 +14,10 @@ enum APIError: LocalizedError {
     }
 }
 
+struct HealthResponse: Decodable {
+    let status: String
+}
+
 class APIClient {
     private let baseURL: String
     private let token: String
@@ -135,5 +139,13 @@ class APIClient {
     func compute(sessionId: Int) async throws -> ComputeResponse {
         let req = try request("/sessions/\(sessionId)/compute", method: "POST")
         return try await perform(req)
+    }
+
+    // MARK: - Health
+
+    func health() async throws -> Bool {
+        let req = try request("/health", method: "GET")
+        let resp: HealthResponse = try await perform(req)
+        return resp.status.lowercased() == "ok"
     }
 }
