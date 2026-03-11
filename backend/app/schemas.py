@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 class HorseCreate(BaseModel):
     name: str
@@ -31,6 +31,7 @@ class SessionOut(BaseModel):
     started_at: datetime
     stopped_at: Optional[datetime]
     status: str
+    is_baseline: bool | None = None
     class Config:
         from_attributes = True
 
@@ -89,3 +90,44 @@ class FeatureWindowExport(BaseModel):
     anomaly: AnomalyOutEmbed | None
     class Config:
         from_attributes = True
+
+# ---------- Compute report schemas ----------
+
+TrotConfidence = Literal["LOW", "MEDIUM", "HIGH"]
+OverallLabel = Literal["NORMAL", "WATCH", "IRREGULAR"]
+
+class ComputeReportMetricsOut(BaseModel):
+    cadence_spm_mean: float | None
+    cadence_spm_std: float | None
+    stride_var_median: float | None
+    stride_var_iqr: float | None
+    asymmetry_proxy_median: float | None
+    asymmetry_proxy_iqr: float | None
+    energy_mean: float | None
+    windows_with_gaps: int
+
+class ComputeReportBaselineOut(BaseModel):
+    cadence_spm_median: float | None
+    cadence_spm_mad: float | None
+    stride_var_median: float | None
+    stride_var_mad: float | None
+    asymmetry_proxy_median: float | None
+    asymmetry_proxy_mad: float | None
+
+class ComputeReportOut(BaseModel):
+    overall_label: OverallLabel
+    trot_confidence: TrotConfidence
+    explanations: List[str]
+    metrics: ComputeReportMetricsOut
+    baseline: ComputeReportBaselineOut
+
+class ComputeResponseOut(BaseModel):
+    windows: int
+    anomalies_total: int
+    anomalies_medium_high: int
+    report: ComputeReportOut
+
+# ---------- Baseline toggle ----------
+
+class BaselineToggleIn(BaseModel):
+    enabled: bool
