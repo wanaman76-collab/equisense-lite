@@ -1,7 +1,7 @@
 from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import (
-    String, Float, DateTime, ForeignKey, UniqueConstraint, Enum, JSON, BigInteger
+    String, Float, DateTime, ForeignKey, UniqueConstraint, Enum, JSON, BigInteger, Boolean
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
@@ -43,6 +43,11 @@ class Session(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     stopped_at: Mapped[datetime | None] = mapped_column(DateTime, default=None)
     status: Mapped[SessionStatus] = mapped_column(Enum(SessionStatus), default=SessionStatus.DRAFT)
+
+    # Baseline sessions are "known-good" sessions used to build per-horse baselines.
+    # NOTE: requires DB migration on existing DBs:
+    # ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE;
+    is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
 
     horse: Mapped["Horse"] = relationship(back_populates="sessions")
     readings: Mapped[list["SensorReading"]] = relationship(back_populates="session", cascade="all, delete-orphan")
