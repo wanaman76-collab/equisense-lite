@@ -46,17 +46,43 @@ const tableStyle: React.CSSProperties = {
 const thStyle: React.CSSProperties = { border: '1px solid #ccc', padding: '4px 8px', background: '#f5f5f5', whiteSpace: 'nowrap' }
 const tdStyle: React.CSSProperties = { border: '1px solid #ccc', padding: '4px 8px', whiteSpace: 'nowrap' }
 
+function Badge({ text, color }: { text: string, color: string }) {
+  return (
+    <span style={{
+      display: 'inline-block',
+      padding: '2px 8px',
+      borderRadius: 999,
+      background: color,
+      color: '#111',
+      fontSize: 12,
+      border: '1px solid rgba(0,0,0,0.1)',
+      marginLeft: 8,
+      whiteSpace: 'nowrap',
+    }}>
+      {text}
+    </span>
+  )
+}
+
+function labelColor(label: string) {
+  if (label === 'NORMAL') return '#d4edda'
+  if (label === 'WATCH') return '#fff3cd'
+  return '#f8d7da'
+}
+
 export default function App() {
   const { token, setToken } = useToken()
   const [horseId, setHorseId] = useState(1)
   const [newHorseName, setNewHorseName] = useState('Blaze')
-  const [sessionId, setSessionId] = useState<number|undefined>()
+  const [sessionId, setSessionId] = useState<number | undefined>()
   const [sessions, setSessions] = useState<any[]>([])
-  const [selectedSessionId, setSelectedSessionId] = useState<number|undefined>()
+  const [selectedSessionId, setSelectedSessionId] = useState<number | undefined>()
   const [features, setFeatures] = useState<any[]>([])
   const [anomalies, setAnomalies] = useState<any[]>([])
   const [statusMsg, setStatusMsg] = useState('')
   const [statusOk, setStatusOk] = useState(true)
+  const [computeResult, setComputeResult] = useState<any | null>(null)
+
   const headers = { 'X-API-Token': token, 'Content-Type': 'application/json' }
 
   function setStatus(msg: string, ok = true) {
@@ -65,7 +91,7 @@ export default function App() {
 
   async function createHorse() {
     try {
-      const res = await fetch(`${API}/horses`, { method:'POST', headers, body: JSON.stringify({ name: newHorseName }) })
+      const res = await fetch(`${API}/horses`, { method: 'POST', headers, body: JSON.stringify({ name: newHorseName }) })
       if (res.ok) setStatus(`Horse "${newHorseName}" created successfully.`)
       else {
         const body = await res.json().catch(() => ({}))
@@ -78,10 +104,11 @@ export default function App() {
 
   async function start() {
     try {
-      const res = await fetch(`${API}/sessions`, { method:'POST', headers, body: JSON.stringify({ horse_id: horseId, surface:'arena' }) })
+      const res = await fetch(`${API}/sessions`, { method: 'POST', headers, body: JSON.stringify({ horse_id: horseId, surface: 'arena' }) })
       if (res.ok) {
         const data = await res.json()
         setSessionId(data.id)
+        setComputeResult(null)
         setStatus(`Session #${data.id} started.`)
       } else {
         const body = await res.json().catch(() => ({}))
@@ -96,8 +123,8 @@ export default function App() {
     if (!sessionId) return
     try {
       const now = Date.now()
-      const readings = Array.from({length:400}, (_,i)=>({ ts_ms: now + i*50, ax: Math.sin(i/5)/10, ay: 0, az: Math.cos(i/7)/10, gx:0.01, gy:0.02, gz:0.03 }))
-      const res = await fetch(`${API}/ingest`, { method:'POST', headers, body: JSON.stringify({ session_id: sessionId, readings }) })
+      const readings = Array.from({ length: 400 }, (_, i) => ({ ts_ms: now + i * 50, ax: Math.sin(i / 5) / 10, ay: 0, az: Math.cos(i / 7) / 10, gx: 0.01, gy: 0.02, gz: 0.03 }))
+      const res = await fetch(`${API}/ingest`, { method: 'POST', headers, body: JSON.stringify({ session_id: sessionId, readings }) })
       if (res.ok) setStatus('Fake readings ingested (400 samples).')
       else setStatus(`Ingest failed: ${res.statusText}`, false)
     } catch (e: any) {
@@ -108,10 +135,13 @@ export default function App() {
   async function compute() {
     if (!sessionId) return
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/compute`, { method:'POST', headers })
+      const res = await fetch(`${API}/sessions/${sessionId}/compute`, { method: 'POST', headers })
       if (res.ok) {
         const d = await res.json()
-        setStatus(`Computed ${d.windows} windows, ${d.anomalies} anomalies.`)
+        setComputeResult(d)
+        setStatus(
+          `Computed ${d.windows} windows. Anomalies: ${d.anomalies_total} (med/high: ${d.anomalies_medium_high}). Overall: ${d.report?.overall_label ?? '—'}.`
+        )
       } else setStatus(`Compute failed: ${res.statusText}`, false)
     } catch (e: any) {
       setStatus(`Network error: ${e.message}`, false)
@@ -121,7 +151,7 @@ export default function App() {
   async function stop() {
     if (!sessionId) return
     try {
-      const res = await fetch(`${API}/sessions/${sessionId}/stop`, { method:'POST', headers })
+      const res = await fetch(`${API}/sessions/${sessionId}/stop`, { method: 'POST', headers })
       if (res.ok) {
         setStatus(`Session #${sessionId} stopped.`)
         setSessionId(undefined)
@@ -158,13 +188,15 @@ export default function App() {
     }
   }
 
+  const report = computeResult?.report
+
   return (
-    <div style={{padding:16, fontFamily:'sans-serif', maxWidth:600, margin:'0 auto'}}>
-      <h2 style={{marginTop:0}}>EquiSense Lite</h2>
+    <div style={{ padding: 16, fontFamily: 'sans-serif', maxWidth: 760, margin: '0 auto' }}>
+      <h2 style={{ marginTop: 0 }}>EquiSense Lite</h2>
 
       {statusMsg && (
         <div style={{
-          padding:'10px 14px', borderRadius:6, marginBottom:16,
+          padding: '10px 14px', borderRadius: 6, marginBottom: 16,
           background: statusOk ? '#e6f4ea' : '#fce8e6',
           color: statusOk ? '#1e7e34' : '#c0392b',
           border: `1px solid ${statusOk ? '#a8d5b0' : '#f1a9a0'}`,
@@ -174,33 +206,112 @@ export default function App() {
       )}
 
       <div style={sectionStyle}>
-        <h3 style={{marginTop:0}}>API Token</h3>
-        <input style={inputStyle} placeholder="X-API-Token (e.g. dev-token)" value={token} onChange={e=>setToken(e.target.value)} />
-        <small style={{color:'#666'}}>Stored in localStorage. Use "dev-token" for local dev.</small>
+        <h3 style={{ marginTop: 0 }}>API Token</h3>
+        <input style={inputStyle} placeholder="X-API-Token (e.g. dev-token)" value={token} onChange={e => setToken(e.target.value)} />
+        <small style={{ color: '#666' }}>Stored in localStorage. Use "dev-token" for local dev.</small>
       </div>
 
       <div style={sectionStyle}>
-        <h3 style={{marginTop:0}}>Create Horse</h3>
+        <h3 style={{ marginTop: 0 }}>Create Horse</h3>
         <label>Name</label>
-        <input style={inputStyle} value={newHorseName} onChange={e=>setNewHorseName(e.target.value)} />
+        <input style={inputStyle} value={newHorseName} onChange={e => setNewHorseName(e.target.value)} />
         <button style={btnStyle} onClick={createHorse} disabled={!token}>Create Horse</button>
       </div>
 
       <div style={sectionStyle}>
-        <h3 style={{marginTop:0}}>Session Controls</h3>
+        <h3 style={{ marginTop: 0 }}>Session Controls</h3>
         <label>Horse ID</label>
-        <input style={{...inputStyle, width:80}} type="number" value={horseId} onChange={e=>setHorseId(parseInt(e.target.value))} />
-        <div style={{marginTop:10, display:'flex', flexWrap:'wrap', gap:8}}>
+        <input style={{ ...inputStyle, width: 80 }} type="number" value={horseId} onChange={e => setHorseId(parseInt(e.target.value))} />
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button style={btnStyle} onClick={start} disabled={!token}>Start Session</button>
           <button style={btnStyle} onClick={ingestFake} disabled={!sessionId}>Ingest Fake Data</button>
           <button style={btnStyle} onClick={compute} disabled={!sessionId}>Compute</button>
           <button style={btnStyle} onClick={stop} disabled={!sessionId}>Stop Session</button>
         </div>
-        {sessionId && <p style={{color:'#555', marginBottom:0}}>Active session: <strong>#{sessionId}</strong></p>}
+        {sessionId && <p style={{ color: '#555', marginBottom: 0 }}>Active session: <strong>#{sessionId}</strong></p>}
       </div>
 
+      {computeResult && (
+        <div style={sectionStyle}>
+          <h3 style={{ marginTop: 0 }}>
+            Session Report
+            {report?.overall_label && <Badge text={report.overall_label} color={labelColor(report.overall_label)} />}
+            {report?.trot_confidence && <Badge text={`Trot: ${report.trot_confidence}`} color="#e2e3ff" />}
+          </h3>
+
+          <p style={{ marginTop: 8, color: '#444' }}>
+            Windows: <strong>{computeResult.windows}</strong> ·
+            Anomalies: <strong>{computeResult.anomalies_total}</strong> ·
+            Med/High: <strong>{computeResult.anomalies_medium_high}</strong>
+          </p>
+
+          {Array.isArray(report?.explanations) && report.explanations.length > 0 && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>Notes</h4>
+              <ul style={{ marginTop: 0 }}>
+                {report.explanations.map((x: string, i: number) => <li key={i}>{x}</li>)}
+              </ul>
+            </>
+          )}
+
+          {report?.metrics && (
+            <>
+              <h4 style={{ marginBottom: 6 }}>Metrics</h4>
+              <table style={{ ...tableStyle, fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Metric</th>
+                    <th style={thStyle}>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td style={tdStyle}>Cadence mean</td><td style={tdStyle}>{report.metrics.cadence_spm_mean?.toFixed?.(1) ?? '—'}</td></tr>
+                  <tr><td style={tdStyle}>Cadence std</td><td style={tdStyle}>{report.metrics.cadence_spm_std?.toFixed?.(1) ?? '—'}</td></tr>
+                  <tr><td style={tdStyle}>Stride var median</td><td style={tdStyle}>{report.metrics.stride_var_median?.toFixed?.(4) ?? '—'}</td></tr>
+                  <tr><td style={tdStyle}>Asymmetry median</td><td style={tdStyle}>{report.metrics.asymmetry_proxy_median?.toFixed?.(4) ?? '—'}</td></tr>
+                  <tr><td style={tdStyle}>Energy mean</td><td style={tdStyle}>{report.metrics.energy_mean?.toFixed?.(4) ?? '—'}</td></tr>
+                  <tr><td style={tdStyle}>Windows with gaps</td><td style={tdStyle}>{report.metrics.windows_with_gaps ?? 0}</td></tr>
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {report?.baseline && (
+            <>
+              <h4 style={{ marginBottom: 6, marginTop: 14 }}>Baseline used</h4>
+              <table style={{ ...tableStyle, fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th style={thStyle}>Feature</th>
+                    <th style={thStyle}>Median</th>
+                    <th style={thStyle}>MAD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td style={tdStyle}>cadence_spm</td>
+                    <td style={tdStyle}>{report.baseline.cadence_spm_median?.toFixed?.(1) ?? '—'}</td>
+                    <td style={tdStyle}>{report.baseline.cadence_spm_mad?.toFixed?.(3) ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td style={tdStyle}>stride_var</td>
+                    <td style={tdStyle}>{report.baseline.stride_var_median?.toFixed?.(4) ?? '—'}</td>
+                    <td style={tdStyle}>{report.baseline.stride_var_mad?.toFixed?.(4) ?? '—'}</td>
+                  </tr>
+                  <tr>
+                    <td style={tdStyle}>asymmetry_proxy</td>
+                    <td style={tdStyle}>{report.baseline.asymmetry_proxy_median?.toFixed?.(4) ?? '—'}</td>
+                    <td style={tdStyle}>{report.baseline.asymmetry_proxy_mad?.toFixed?.(4) ?? '—'}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </>
+          )}
+        </div>
+      )}
+
       <div style={sectionStyle}>
-        <h3 style={{marginTop:0}}>Sessions</h3>
+        <h3 style={{ marginTop: 0 }}>Sessions</h3>
         <button style={btnStyle} onClick={listSessions} disabled={!token}>Refresh</button>
         {sessions.length > 0 && (
           <table style={tableStyle}>
@@ -214,12 +325,12 @@ export default function App() {
             </thead>
             <tbody>
               {sessions.map(s => (
-                <tr key={s.id} style={{background: selectedSessionId===s.id ? '#fffde7':undefined}}>
+                <tr key={s.id} style={{ background: selectedSessionId === s.id ? '#fffde7' : undefined }}>
                   <td style={tdStyle}>{s.id}</td>
                   <td style={tdStyle}>{s.status}</td>
                   <td style={tdStyle}>{new Date(s.started_at).toLocaleString()}</td>
                   <td style={tdStyle}>
-                    <button style={{...btnStyle, padding:'4px 10px', fontSize:13, marginTop:0}} onClick={()=>loadSessionDetails(s.id)}>View</button>
+                    <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 13, marginTop: 0 }} onClick={() => loadSessionDetails(s.id)}>View</button>
                   </td>
                 </tr>
               ))}
@@ -231,8 +342,8 @@ export default function App() {
       {selectedSessionId !== undefined && (
         <>
           <div style={sectionStyle}>
-            <h3 style={{marginTop:0}}>Feature Windows — Session #{selectedSessionId}</h3>
-            {features.length === 0 ? <p style={{color:'#999'}}>No features computed yet.</p> : (
+            <h3 style={{ marginTop: 0 }}>Feature Windows — Session #{selectedSessionId}</h3>
+            {features.length === 0 ? <p style={{ color: '#999' }}>No features computed yet.</p> : (
               <table style={tableStyle}>
                 <thead>
                   <tr>
@@ -261,8 +372,8 @@ export default function App() {
           </div>
 
           <div style={sectionStyle}>
-            <h3 style={{marginTop:0}}>Anomalies — Session #{selectedSessionId}</h3>
-            {anomalies.length === 0 ? <p style={{color:'#999'}}>No anomalies detected.</p> : (
+            <h3 style={{ marginTop: 0 }}>Anomalies — Session #{selectedSessionId}</h3>
+            {anomalies.length === 0 ? <p style={{ color: '#999' }}>No anomalies detected.</p> : (
               <table style={tableStyle}>
                 <thead>
                   <tr>
@@ -292,4 +403,3 @@ export default function App() {
     </div>
   )
 }
-
