@@ -27,6 +27,7 @@ struct SessionOut: Decodable {
     let started_at: String
     let stopped_at: String?
     let status: String
+    let is_baseline: Bool?
 }
 
 // MARK: - Ingest
@@ -39,7 +40,39 @@ struct IngestResponse: Decodable {
     let stored: Int
 }
 
-// MARK: - Compute
+// MARK: - Compute (new report shape)
+
+struct ComputeReportMetrics: Decodable {
+    let cadence_spm_mean: Double?
+    let cadence_spm_std: Double?
+    let stride_var_median: Double?
+    let stride_var_iqr: Double?
+    let asymmetry_proxy_median: Double?
+    let asymmetry_proxy_iqr: Double?
+    let energy_mean: Double?
+    let windows_with_gaps: Int
+}
+
+struct ComputeReportBaseline: Decodable {
+    let cadence_spm_median: Double?
+    let cadence_spm_mad: Double?
+    let stride_var_median: Double?
+    let stride_var_mad: Double?
+    let asymmetry_proxy_median: Double?
+    let asymmetry_proxy_mad: Double?
+}
+
+struct ComputeReport: Decodable {
+    let overall_label: String
+    let trot_confidence: String
+    let explanations: [String]
+    let metrics: ComputeReportMetrics
+    let baseline: ComputeReportBaseline
+}
+
 struct ComputeResponse: Decodable {
     let windows: Int
+    let anomalies_total: Int
+    let anomalies_medium_high: Int
+    let report: ComputeReport
 }
