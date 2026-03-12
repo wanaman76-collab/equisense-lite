@@ -156,6 +156,7 @@ struct HorseSessionView: View {
             )
             recordingStore.sessionId = session.id
             recordingStore.sessionHorseName = horse.name
+            recordingStore.sessionHorseId = horse.id
             statusMessage = "Session \(session.id) started for \(horse.name) ✓"
             isError = false
         } catch {
