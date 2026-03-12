@@ -82,6 +82,8 @@ export default function App() {
   const [statusMsg, setStatusMsg] = useState('')
   const [statusOk, setStatusOk] = useState(true)
   const [computeResult, setComputeResult] = useState<any | null>(null)
+  const [baselineBusySessionId, setBaselineBusySessionId] = useState<number | null>(null)
+  const [baselineRecomputeBusy, setBaselineRecomputeBusy] = useState(false)
 
   const headers = { 'X-API-Token': token, 'Content-Type': 'application/json' }
 
@@ -188,6 +190,48 @@ export default function App() {
     }
   }
 
+  async function markBaseline(id: number) {
+    if (!token) return
+    setBaselineBusySessionId(id)
+    try {
+      const res = await fetch(`${API}/sessions/${id}/baseline`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ enabled: true }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setStatus(`Failed to mark baseline: ${body.detail ?? res.statusText}`, false)
+        return
+      }
+      setStatus(`Session #${id} marked as baseline ✓`)
+      // refresh list so the ✓ appears
+      await listSessions()
+    } catch (e: any) {
+      setStatus(`Network error: ${e.message}`, false)
+    } finally {
+      setBaselineBusySessionId(null)
+    }
+  }
+
+  async function recomputeBaseline() {
+    if (!token) return
+    setBaselineRecomputeBusy(true)
+    try {
+      const res = await fetch(`${API}/horses/${horseId}/baseline/recompute`, { method: 'POST', headers })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        setStatus(`Failed to recompute baseline: ${body.detail ?? res.statusText}`, false)
+        return
+      }
+      setStatus(`Baseline recomputed for horse #${horseId} ✓`)
+    } catch (e: any) {
+      setStatus(`Network error: ${e.message}`, false)
+    } finally {
+      setBaselineRecomputeBusy(false)
+    }
+  }
+
   const report = computeResult?.report
 
   return (
@@ -222,12 +266,20 @@ export default function App() {
         <h3 style={{ marginTop: 0 }}>Session Controls</h3>
         <label>Horse ID</label>
         <input style={{ ...inputStyle, width: 80 }} type="number" value={horseId} onChange={e => setHorseId(parseInt(e.target.value))} />
+
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button style={btnStyle} onClick={start} disabled={!token}>Start Session</button>
           <button style={btnStyle} onClick={ingestFake} disabled={!sessionId}>Ingest Fake Data</button>
           <button style={btnStyle} onClick={compute} disabled={!sessionId}>Compute</button>
           <button style={btnStyle} onClick={stop} disabled={!sessionId}>Stop Session</button>
         </div>
+
+        <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          <button style={btnStyle} onClick={recomputeBaseline} disabled={!token || baselineRecomputeBusy}>
+            {baselineRecomputeBusy ? 'Recomputing…' : `Recompute Baseline (Horse #${horseId})`}
+          </button>
+        </div>
+
         {sessionId && <p style={{ color: '#555', marginBottom: 0 }}>Active session: <strong>#{sessionId}</strong></p>}
       </div>
 
@@ -320,7 +372,8 @@ export default function App() {
                 <th style={thStyle}>#</th>
                 <th style={thStyle}>Status</th>
                 <th style={thStyle}>Started</th>
-                <th style={thStyle}>Details</th>
+                <th style={thStyle}>Baseline</th>
+                <th style={thStyle}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -329,14 +382,32 @@ export default function App() {
                   <td style={tdStyle}>{s.id}</td>
                   <td style={tdStyle}>{s.status}</td>
                   <td style={tdStyle}>{new Date(s.started_at).toLocaleString()}</td>
+                  <td style={tdStyle}>{s.is_baseline ? '✓' : '—'}</td>
                   <td style={tdStyle}>
-                    <button style={{ ...btnStyle, padding: '4px 10px', fontSize: 13, marginTop: 0 }} onClick={() => loadSessionDetails(s.id)}>View</button>
+                    <button
+                      style={{ ...btnStyle, padding: '4px 10px', fontSize: 13, marginTop: 0 }}
+                      onClick={() => loadSessionDetails(s.id)}
+                    >
+                      View
+                    </button>
+
+                    <button
+                      style={{ ...btnStyle, padding: '4px 10px', fontSize: 13, marginTop: 0 }}
+                      onClick={() => markBaseline(s.id)}
+                      disabled={!token || baselineBusySessionId === s.id}
+                      title="Mark this session as a baseline session for its horse."
+                    >
+                      {baselineBusySessionId === s.id ? 'Marking…' : 'Mark Baseline'}
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
+        <p style={{ marginTop: 10, color: '#666', fontSize: 12 }}>
+          Tip: Mark 3–5 good trot sessions as baseline, then recompute baseline for the horse.
+        </p>
       </div>
 
       {selectedSessionId !== undefined && (
