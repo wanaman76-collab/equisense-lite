@@ -5,7 +5,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
 from .db import Base, engine
@@ -13,18 +13,23 @@ from .routers import horses, ingest, sessions
 
 app = FastAPI(title="EquiSense Lite API")
 
-# Create tables (for fresh DB)
+# Create tables (fresh DB)
 Base.metadata.create_all(bind=engine)
 
-# Minimal migration for existing SQLite DBs:
-# Add sessions.is_baseline if the DB was created before this column existed.
+# Minimal migration:
+# Ensure sessions.is_baseline exists for older DBs.
+# Works on Postgres (IF NOT EXISTS) and won't break if already present.
 try:
     with engine.begin() as conn:
         conn.execute(
-            text("ALTER TABLE sessions ADD COLUMN is_baseline BOOLEAN NOT NULL DEFAULT 0")
+            text(
+                "ALTER TABLE sessions "
+                "ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE"
+            )
         )
-except OperationalError:
-    # Likely "duplicate column name: is_baseline" (already migrated) or table missing on first boot.
+except SQLAlchemyError:
+    # If anything unexpected happens, don't crash the server startup.
+    # (But endpoints may still error; check logs.)
     pass
 
 # CORS: allow Netlify production + deploy previews + local dev
