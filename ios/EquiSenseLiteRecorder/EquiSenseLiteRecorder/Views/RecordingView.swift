@@ -16,6 +16,9 @@ struct RecordingView: View {
     @State private var serverOK: Bool? = nil
     @State private var serverStatusText: String = "Checking…"
 
+    // Calibration UI
+    @State private var isCalibrating: Bool = false
+
     // Baseline workflow UI
     @State private var baselineStatus: String = ""
     @State private var baselineIsError: Bool = false
@@ -196,6 +199,18 @@ struct RecordingView: View {
                         }
                     }
                     .padding(.top, 4)
+
+                    // NEW: calibration status
+                    if recordingStore.isRecording && isCalibrating {
+                        HStack(spacing: 10) {
+                            ProgressView()
+                            Text("Calibrating… hold still for a moment")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                    }
 
                     // Motion indicator + toggles
                     GroupBox(label: Label("Live", systemImage: "waveform")) {
@@ -392,9 +407,20 @@ struct RecordingView: View {
 
         recordingStore.startRecording(sessionId: sessionId, horseId: horseId, horseName: horseName)
 
-        motionManager.start { sample in
-            recordingStore.addSample(sample)
-        }
+        // Start with calibrating visible immediately
+        isCalibrating = true
+
+        motionManager.start(
+            onCalibrationChanged: { calibrating in
+                // Ensure UI updates on main thread
+                DispatchQueue.main.async {
+                    self.isCalibrating = calibrating
+                }
+            },
+            onSample: { sample in
+                recordingStore.addSample(sample)
+            }
+        )
 
         elapsedTime = 0
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
@@ -409,6 +435,9 @@ struct RecordingView: View {
         recordingStore.stopRecording()
         timer?.invalidate()
         timer = nil
+
+        // stop showing calibration if user stops early
+        isCalibrating = false
 
         // Re-enable screen sleep
         UIApplication.shared.isIdleTimerDisabled = false
