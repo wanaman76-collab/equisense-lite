@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+
 const API = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
 const tokenKey = 'api_token'
 
@@ -205,7 +206,7 @@ export default function App() {
         return
       }
       setStatus(`Session #${id} marked as baseline ✓`)
-      // refresh list so the ✓ appears
+      // refresh list so the ✓ appears (if API returns is_baseline)
       await listSessions()
     } catch (e: any) {
       setStatus(`Network error: ${e.message}`, false)
@@ -365,6 +366,7 @@ export default function App() {
       <div style={sectionStyle}>
         <h3 style={{ marginTop: 0 }}>Sessions</h3>
         <button style={btnStyle} onClick={listSessions} disabled={!token}>Refresh</button>
+
         {sessions.length > 0 && (
           <table style={tableStyle}>
             <thead>
@@ -405,6 +407,7 @@ export default function App() {
             </tbody>
           </table>
         )}
+
         <p style={{ marginTop: 10, color: '#666', fontSize: 12 }}>
           Tip: Mark 3–5 good trot sessions as baseline, then recompute baseline for the horse.
         </p>
