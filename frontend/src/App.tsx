@@ -86,10 +86,47 @@ export default function App() {
   const [baselineBusySessionId, setBaselineBusySessionId] = useState<number | null>(null)
   const [baselineRecomputeBusy, setBaselineRecomputeBusy] = useState(false)
 
+  // Demo polish state
+  const [demoBusy, setDemoBusy] = useState(false)
+  const [demoLastSessionId, setDemoLastSessionId] = useState<number | null>(null)
+
   const headers = { 'X-API-Token': token, 'Content-Type': 'application/json' }
 
   function setStatus(msg: string, ok = true) {
     setStatusMsg(msg); setStatusOk(ok)
+  }
+
+  function severityCounts(anoms: any[]) {
+    const counts = { LOW: 0, MEDIUM: 0, HIGH: 0 }
+    for (const a of anoms ?? []) {
+      if (a?.severity === 'LOW') counts.LOW++
+      else if (a?.severity === 'MEDIUM') counts.MEDIUM++
+      else if (a?.severity === 'HIGH') counts.HIGH++
+    }
+    return counts
+  }
+
+  async function exportCsv(id: number) {
+    try {
+      const res = await fetch(`${API}/sessions/${id}/export.csv`, { headers })
+      if (!res.ok) {
+        const body = await res.text().catch(() => '')
+        setStatus(`Export failed: ${res.statusText}${body ? ` — ${body}` : ''}`, false)
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `session_${id}_windows.csv`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      setStatus(`Downloaded CSV export for session #${id}.`)
+    } catch (e: any) {
+      setStatus(`Network error: ${e.message}`, false)
+    }
   }
 
   async function createHorse() {
@@ -253,6 +290,79 @@ export default function App() {
     }
   }
 
+  async function runDemo() {
+    if (!token) return
+    setDemoBusy(true)
+    try {
+      // 1) Start session (directly, so we can capture id reliably)
+      const startRes = await fetch(`${API}/sessions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ horse_id: horseId, surface: 'arena', notes: 'demo' }),
+      })
+      if (!startRes.ok) {
+        const body = await startRes.json().catch(() => ({}))
+        setStatus(`Demo failed to start session: ${body.detail ?? startRes.statusText}`, false)
+        return
+      }
+      const startData = await startRes.json()
+      const sid = startData.id as number
+
+      setSessionId(sid)
+      setDemoLastSessionId(sid)
+      setComputeResult(null)
+      setSelectedSessionId(undefined)
+      setFeatures([])
+      setAnomalies([])
+      setStatus(`Demo started session #${sid}. Ingesting + computing…`)
+
+      // 2) Ingest fake data
+      const now = Date.now()
+      const readings = Array.from({ length: 400 }, (_, i) => ({
+        ts_ms: now + i * 50,
+        ax: Math.sin(i / 5) / 10,
+        ay: 0,
+        az: Math.cos(i / 7) / 10,
+        gx: 0.01,
+        gy: 0.02,
+        gz: 0.03,
+      }))
+
+      const ingestRes = await fetch(`${API}/ingest`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ session_id: sid, readings }),
+      })
+      if (!ingestRes.ok) {
+        const body = await ingestRes.json().catch(() => ({}))
+        setStatus(`Demo ingest failed: ${body.detail ?? ingestRes.statusText}`, false)
+        return
+      }
+
+      // 3) Compute
+      const compRes = await fetch(`${API}/sessions/${sid}/compute`, { method: 'POST', headers })
+      if (!compRes.ok) {
+        const body = await compRes.json().catch(() => ({}))
+        setStatus(`Demo compute failed: ${body.detail ?? compRes.statusText}`, false)
+        return
+      }
+      const compData = await compRes.json()
+      setComputeResult(compData)
+
+      // 4) Refresh sessions list and auto-load details
+      await listSessions()
+      await loadSessionDetails(sid)
+
+      setStatus(
+        `Demo complete ✓ Session #${sid}: ${compData.report?.overall_label ?? '—'} with ${compData.anomalies_total ?? 0} anomalies.`
+      )
+    } catch (e: any) {
+      setStatus(`Network error: ${e.message}`, false)
+    } finally {
+      setDemoBusy(false)
+    }
+  }
+
   const report = computeResult?.report
 
   return (
@@ -305,6 +415,10 @@ export default function App() {
           <button style={btnStyle} onClick={ingestFake} disabled={!sessionId}>Ingest Fake Data</button>
           <button style={btnStyle} onClick={compute} disabled={!sessionId}>Compute</button>
           <button style={btnStyle} onClick={stop} disabled={!sessionId}>Stop Session</button>
+
+          <button style={btnStyle} onClick={runDemo} disabled={!token || demoBusy}>
+            {demoBusy ? 'Running Demo…' : 'Run Demo (Start→Ingest→Compute)'}
+          </button>
         </div>
 
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -322,6 +436,16 @@ export default function App() {
             Session Report
             {report?.overall_label && <Badge text={report.overall_label} color={labelColor(report.overall_label)} />}
             {report?.trot_confidence && <Badge text={`Trot: ${report.trot_confidence}`} color="#e2e3ff" />}
+
+            {demoLastSessionId && (
+              <button
+                style={{ ...btnStyle, padding: '6px 10px', fontSize: 13, marginTop: 0 }}
+                onClick={() => exportCsv(demoLastSessionId)}
+                title="Download computed windows + anomaly fields as CSV."
+              >
+                Export CSV
+              </button>
+            )}
           </h3>
 
           <p style={{ marginTop: 8, color: '#444' }}>
@@ -329,6 +453,22 @@ export default function App() {
             Anomalies: <strong>{computeResult.anomalies_total}</strong> ·
             Med/High: <strong>{computeResult.anomalies_medium_high}</strong>
           </p>
+
+          {(() => {
+            const counts = severityCounts(anomalies)
+            const total = counts.LOW + counts.MEDIUM + counts.HIGH
+            if (total === 0) return null
+            return (
+              <div style={{ marginTop: 10 }}>
+                <h4 style={{ marginBottom: 6 }}>Severity summary</h4>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Badge text={`LOW: ${counts.LOW}`} color="#d4edda" />
+                  <Badge text={`MEDIUM: ${counts.MEDIUM}`} color="#fff3cd" />
+                  <Badge text={`HIGH: ${counts.HIGH}`} color="#f8d7da" />
+                </div>
+              </div>
+            )
+          })()}
 
           {Array.isArray(report?.explanations) && report.explanations.length > 0 && (
             <>
