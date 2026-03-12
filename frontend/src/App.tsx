@@ -94,7 +94,11 @@ export default function App() {
 
   async function createHorse() {
     try {
-      const res = await fetch(`${API}/horses`, { method: 'POST', headers, body: JSON.stringify({ name: newHorseName }) })
+      const res = await fetch(`${API}/horses`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: newHorseName }),
+      })
       if (res.ok) setStatus(`Horse "${newHorseName}" created successfully.`)
       else {
         const body = await res.json().catch(() => ({}))
@@ -107,7 +111,11 @@ export default function App() {
 
   async function start() {
     try {
-      const res = await fetch(`${API}/sessions`, { method: 'POST', headers, body: JSON.stringify({ horse_id: horseId, surface: 'arena' }) })
+      const res = await fetch(`${API}/sessions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ horse_id: horseId, surface: 'arena' }),
+      })
       if (res.ok) {
         const data = await res.json()
         setSessionId(data.id)
@@ -126,8 +134,20 @@ export default function App() {
     if (!sessionId) return
     try {
       const now = Date.now()
-      const readings = Array.from({ length: 400 }, (_, i) => ({ ts_ms: now + i * 50, ax: Math.sin(i / 5) / 10, ay: 0, az: Math.cos(i / 7) / 10, gx: 0.01, gy: 0.02, gz: 0.03 }))
-      const res = await fetch(`${API}/ingest`, { method: 'POST', headers, body: JSON.stringify({ session_id: sessionId, readings }) })
+      const readings = Array.from({ length: 400 }, (_, i) => ({
+        ts_ms: now + i * 50,
+        ax: Math.sin(i / 5) / 10,
+        ay: 0,
+        az: Math.cos(i / 7) / 10,
+        gx: 0.01,
+        gy: 0.02,
+        gz: 0.03,
+      }))
+      const res = await fetch(`${API}/ingest`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ session_id: sessionId, readings }),
+      })
       if (res.ok) setStatus('Fake readings ingested (400 samples).')
       else setStatus(`Ingest failed: ${res.statusText}`, false)
     } catch (e: any) {
@@ -241,7 +261,9 @@ export default function App() {
 
       {statusMsg && (
         <div style={{
-          padding: '10px 14px', borderRadius: 6, marginBottom: 16,
+          padding: '10px 14px',
+          borderRadius: 6,
+          marginBottom: 16,
           background: statusOk ? '#e6f4ea' : '#fce8e6',
           color: statusOk ? '#1e7e34' : '#c0392b',
           border: `1px solid ${statusOk ? '#a8d5b0' : '#f1a9a0'}`,
@@ -252,7 +274,12 @@ export default function App() {
 
       <div style={sectionStyle}>
         <h3 style={{ marginTop: 0 }}>API Token</h3>
-        <input style={inputStyle} placeholder="X-API-Token (e.g. dev-token)" value={token} onChange={e => setToken(e.target.value)} />
+        <input
+          style={inputStyle}
+          placeholder="X-API-Token (e.g. dev-token)"
+          value={token}
+          onChange={e => setToken(e.target.value)}
+        />
         <small style={{ color: '#666' }}>Stored in localStorage. Use "dev-token" for local dev.</small>
       </div>
 
@@ -266,7 +293,12 @@ export default function App() {
       <div style={sectionStyle}>
         <h3 style={{ marginTop: 0 }}>Session Controls</h3>
         <label>Horse ID</label>
-        <input style={{ ...inputStyle, width: 80 }} type="number" value={horseId} onChange={e => setHorseId(parseInt(e.target.value))} />
+        <input
+          style={{ ...inputStyle, width: 80 }}
+          type="number"
+          value={horseId}
+          onChange={e => setHorseId(parseInt(e.target.value))}
+        />
 
         <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <button style={btnStyle} onClick={start} disabled={!token}>Start Session</button>
