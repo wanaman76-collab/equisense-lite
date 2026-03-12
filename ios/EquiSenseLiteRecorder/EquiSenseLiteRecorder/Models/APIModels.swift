@@ -40,6 +40,16 @@ struct IngestResponse: Decodable {
     let stored: Int
 }
 
+// MARK: - Baseline toggle
+struct BaselineToggleIn: Encodable {
+    let enabled: Bool
+}
+
+struct BaselineRecomputeResponse: Decodable {
+    let horse_id: Int
+    let updated: [[String: Double]]
+}
+
 // MARK: - Compute (new report shape)
 
 struct ComputeReportMetrics: Decodable {
