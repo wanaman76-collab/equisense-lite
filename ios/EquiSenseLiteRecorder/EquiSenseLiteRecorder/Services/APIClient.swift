@@ -72,6 +72,11 @@ class APIClient {
         return try await perform(req)
     }
 
+    func recomputeBaseline(horseId: Int) async throws -> BaselineRecomputeResponse {
+        let req = try request("/horses/\(horseId)/baseline/recompute", method: "POST")
+        return try await perform(req)
+    }
+
     // MARK: - Sessions
 
     func startSession(horseId: Int, surface: String?, notes: String?) async throws -> SessionOut {
@@ -82,6 +87,11 @@ class APIClient {
 
     func stopSession(id: Int) async throws -> SessionOut {
         let req = try request("/sessions/\(id)/stop", method: "POST")
+        return try await perform(req)
+    }
+
+    func setSessionBaseline(sessionId: Int, enabled: Bool) async throws -> SessionOut {
+        let req = try request("/sessions/\(sessionId)/baseline", method: "POST", body: BaselineToggleIn(enabled: enabled))
         return try await perform(req)
     }
 
