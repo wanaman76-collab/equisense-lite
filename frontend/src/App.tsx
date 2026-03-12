@@ -226,6 +226,7 @@ export default function App() {
         return
       }
       setStatus(`Session #${id} marked as baseline ✓`)
+      // refresh list so the ✓ appears (if API returns is_baseline)
       await listSessions()
     } catch (e: any) {
       setStatus(`Network error: ${e.message}`, false)
