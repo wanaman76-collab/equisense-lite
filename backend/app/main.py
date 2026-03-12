@@ -12,9 +12,15 @@ from .routers import horses, ingest, sessions
 app = FastAPI(title="EquiSense Lite API")
 Base.metadata.create_all(bind=engine)
 
+# CORS: allow your production Netlify site + deploy previews + local dev
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://equisense-lite.netlify.app", "http://localhost:5173", "http://localhost:3000"],
+    allow_origins=[
+        "https://equisense-lite.netlify.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+    ],
+    allow_origin_regex=r"https://.*\.netlify\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
