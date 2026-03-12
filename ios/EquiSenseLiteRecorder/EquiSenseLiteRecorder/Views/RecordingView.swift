@@ -16,6 +16,11 @@ struct RecordingView: View {
     @State private var serverOK: Bool? = nil
     @State private var serverStatusText: String = "Checking…"
 
+    // Baseline workflow UI
+    @State private var baselineStatus: String = ""
+    @State private var baselineIsError: Bool = false
+    @State private var isBaselineBusy: Bool = false
+
     private var apiClient: APIClient? {
         guard !settings.apiBaseURL.isEmpty, !settings.apiToken.isEmpty else { return nil }
         return APIClient(baseURL: settings.apiBaseURL, token: settings.apiToken)
@@ -86,6 +91,87 @@ struct RecordingView: View {
                                 Text("You appear to be offline. Upload/compute will fail until network returns.")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(.horizontal)
+
+                    // Latest report (from auto-processing)
+                    if let result = recordingStore.lastComputeResult {
+                        GroupBox(label: Label("Latest Report", systemImage: "doc.text.magnifyingglass")) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("Overall")
+                                    Spacer()
+                                    Text(result.report.overall_label)
+                                        .bold()
+                                        .foregroundStyle(colorForOverall(result.report.overall_label))
+                                }
+                                HStack {
+                                    Text("Trot confidence")
+                                    Spacer()
+                                    Text(result.report.trot_confidence)
+                                        .foregroundStyle(.secondary)
+                                }
+                                HStack {
+                                    Text("Windows")
+                                    Spacer()
+                                    Text("\(result.windows)")
+                                }
+                                HStack {
+                                    Text("Anomalies")
+                                    Spacer()
+                                    Text("\(result.anomalies_total) (med/high: \(result.anomalies_medium_high))")
+                                }
+
+                                if !result.report.explanations.isEmpty {
+                                    Divider()
+                                    ForEach(result.report.explanations, id: \.self) { line in
+                                        Text("• \(line)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal)
+                    }
+
+                    // Baseline actions
+                    GroupBox(label: Label("Baseline", systemImage: "flag.checkered")) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Use 3–5 good trot sessions as baseline, then recompute.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            HStack {
+                                Button {
+                                    Task { await markThisSessionBaseline() }
+                                } label: {
+                                    Label("Mark session baseline", systemImage: "checkmark.seal")
+                                }
+                                .disabled(isBaselineBusy || recordingStore.sessionId == nil || apiClient == nil)
+
+                                Spacer()
+                            }
+
+                            HStack {
+                                Button {
+                                    Task { await recomputeBaseline() }
+                                } label: {
+                                    Label("Recompute baseline", systemImage: "arrow.triangle.2.circlepath")
+                                }
+                                .disabled(isBaselineBusy || recordingStore.sessionHorseId == nil || apiClient == nil)
+
+                                Spacer()
+                            }
+
+                            if !baselineStatus.isEmpty {
+                                Text(baselineStatus)
+                                    .font(.caption)
+                                    .foregroundStyle(baselineIsError ? .red : .green)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -268,6 +354,14 @@ struct RecordingView: View {
         }
     }
 
+    private func colorForOverall(_ label: String) -> Color {
+        switch label.uppercased() {
+        case "NORMAL": return .green
+        case "WATCH": return .orange
+        default: return .red
+        }
+    }
+
     private func refreshHealth() async {
         guard networkMonitor.isOnline else {
             serverOK = false
@@ -290,12 +384,13 @@ struct RecordingView: View {
 
     private func startRecording() {
         guard let sessionId = recordingStore.sessionId,
-              let horseName = recordingStore.sessionHorseName else { return }
+              let horseName = recordingStore.sessionHorseName,
+              let horseId = recordingStore.sessionHorseId else { return }
 
         // Keep screen awake while recording
         UIApplication.shared.isIdleTimerDisabled = true
 
-        recordingStore.startRecording(sessionId: sessionId, horseName: horseName)
+        recordingStore.startRecording(sessionId: sessionId, horseId: horseId, horseName: horseName)
 
         motionManager.start { sample in
             recordingStore.addSample(sample)
@@ -327,6 +422,40 @@ struct RecordingView: View {
         // Kick off auto upload + compute
         Task {
             await recordingStore.uploadAndCompute(client: client)
+        }
+    }
+
+    private func markThisSessionBaseline() async {
+        guard let client = apiClient,
+              let sid = recordingStore.sessionId else { return }
+
+        isBaselineBusy = true
+        defer { isBaselineBusy = false }
+
+        do {
+            _ = try await client.setSessionBaseline(sessionId: sid, enabled: true)
+            baselineStatus = "Session \(sid) marked as baseline ✓"
+            baselineIsError = false
+        } catch {
+            baselineStatus = "Failed to mark baseline: \(error.localizedDescription)"
+            baselineIsError = true
+        }
+    }
+
+    private func recomputeBaseline() async {
+        guard let client = apiClient,
+              let horseId = recordingStore.sessionHorseId else { return }
+
+        isBaselineBusy = true
+        defer { isBaselineBusy = false }
+
+        do {
+            _ = try await client.recomputeBaseline(horseId: horseId)
+            baselineStatus = "Baseline recomputed ✓"
+            baselineIsError = false
+        } catch {
+            baselineStatus = "Baseline recompute failed: \(error.localizedDescription)"
+            baselineIsError = true
         }
     }
 }
