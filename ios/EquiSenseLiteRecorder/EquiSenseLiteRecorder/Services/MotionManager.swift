@@ -56,7 +56,6 @@ class MotionManager {
         guard !isCalibrated else { return }
         guard currentUptime >= calibrationEndUptime else { return }
 
-        // Compute mean bias if we got any samples
         if calCount > 0 {
             let n = Double(calCount)
             biasAx = calSumAx / n
@@ -72,27 +71,29 @@ class MotionManager {
 
     // MARK: - Public API
 
-    func start(onSample: @escaping (SensorSample) -> Void) {
+    func start(
+        onCalibrationChanged: @escaping (Bool) -> Void,
+        onSample: @escaping (SensorSample) -> Void
+    ) {
         guard manager.isDeviceMotionAvailable else { return }
 
-        // Reset epoch anchoring
         startEpochMs = Int64(Date().timeIntervalSince1970 * 1000)
         startUptime = ProcessInfo.processInfo.systemUptime
 
-        // Reset calibration state
         resetCalibration()
         calibrationEndUptime = startUptime + calibrationSeconds
+
+        // tell UI we're calibrating
+        onCalibrationChanged(true)
 
         manager.deviceMotionUpdateInterval = 1.0 / 50.0
 
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, error in
             guard let self, let motion, error == nil else { return }
 
-            // timestamp
             let offsetMs = Int64((motion.timestamp - self.startUptime) * 1000)
             let tsMs = self.startEpochMs + offsetMs
 
-            // raw readings
             let rawAx = motion.userAcceleration.x
             let rawAy = motion.userAcceleration.y
             let rawAz = motion.userAcceleration.z
@@ -100,7 +101,6 @@ class MotionManager {
             let rawGy = motion.rotationRate.y
             let rawGz = motion.rotationRate.z
 
-            // accumulate calibration until window ends
             if !self.isCalibrated {
                 if motion.timestamp < self.calibrationEndUptime {
                     self.calCount += 1
@@ -112,10 +112,11 @@ class MotionManager {
                     self.calSumGz += rawGz
                 } else {
                     self.finalizeCalibrationIfNeeded(currentUptime: motion.timestamp)
+                    // once calibrated, tell UI
+                    if self.isCalibrated { onCalibrationChanged(false) }
                 }
             }
 
-            // apply bias after calibrated
             let ax = rawAx - (self.isCalibrated ? self.biasAx : 0)
             let ay = rawAy - (self.isCalibrated ? self.biasAy : 0)
             let az = rawAz - (self.isCalibrated ? self.biasAz : 0)
