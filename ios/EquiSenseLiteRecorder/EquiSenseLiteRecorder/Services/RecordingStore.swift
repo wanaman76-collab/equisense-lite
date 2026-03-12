@@ -8,7 +8,11 @@ class RecordingStore: ObservableObject {
     @Published var recordingStartTime: Date?
     @Published var sessionId: Int?
     @Published var sessionHorseName: String?
+    @Published var sessionHorseId: Int?
     @Published var isUploaded: Bool = false
+
+    // Latest compute report (used by Recording/Upload screens)
+    @Published var lastComputeResult: ComputeResponse? = nil
 
     // Upload/compute status (so Recording tab can show progress)
     @Published var isAutoProcessing: Bool = false
@@ -21,13 +25,16 @@ class RecordingStore: ObservableObject {
         return docs?.appendingPathComponent("recording_\(sid).jsonl")
     }
 
-    func startRecording(sessionId: Int, horseName: String) {
+    func startRecording(sessionId: Int, horseId: Int, horseName: String) {
         self.sessionId = sessionId
+        self.sessionHorseId = horseId
         self.sessionHorseName = horseName
         self.samples = []
         self.isRecording = true
         self.recordingStartTime = Date()
         self.isUploaded = false
+
+        self.lastComputeResult = nil
 
         self.isAutoProcessing = false
         self.autoProcessingMessage = ""
@@ -65,7 +72,10 @@ class RecordingStore: ObservableObject {
         isUploaded = false
         sessionId = nil
         sessionHorseName = nil
+        sessionHorseId = nil
         recordingStartTime = nil
+
+        lastComputeResult = nil
 
         isAutoProcessing = false
         autoProcessingMessage = ""
@@ -84,6 +94,7 @@ class RecordingStore: ObservableObject {
         isAutoProcessing = true
         autoProcessingError = nil
         autoProcessingMessage = "Uploading…"
+        lastComputeResult = nil
 
         do {
             _ = try await client.uploadAll(sessionId: sid, samples: samplesSnapshot, batchSize: 200) { sent, total in
@@ -92,8 +103,9 @@ class RecordingStore: ObservableObject {
             self.isUploaded = true
             self.autoProcessingMessage = "Upload complete. Computing…"
 
-            _ = try await client.compute(sessionId: sid)
-            self.autoProcessingMessage = "Compute complete ✓"
+            let result = try await client.compute(sessionId: sid)
+            self.lastComputeResult = result
+            self.autoProcessingMessage = "Compute complete ✓ (\(result.report.overall_label))"
         } catch {
             self.autoProcessingError = error.localizedDescription
             self.autoProcessingMessage = "Auto-processing failed."
