@@ -8,6 +8,37 @@ EquiSense Lite is a lightweight prototype for recording equine IMU sessions and 
 
 ---
 
+## Execution Instructions (Deployed System)
+
+### Deployed links
+- Backend API (Render): https://equisense-lite-api-docker.onrender.com  
+- Web dashboard (Netlify): https://equisense-lite.netlify.app/  
+
+### Quick check (backend is live)
+Open:
+- https://equisense-lite-api-docker.onrender.com/health
+
+Expected response:
+- `{"status":"ok"}`
+
+> Note: Render services may take ~30–60 seconds to wake up if idle. Refresh if needed.
+
+### How to use (end-to-end)
+1. **Run the iOS app** (see “iOS App — EquiSenseLiteRecorder” section below).
+2. In iOS **Settings**, set:
+   - API Base URL: `https://equisense-lite-api-docker.onrender.com`
+   - API Token: use the token configured in Render (provided separately for assessment).
+3. Create/select a horse (example used in testing: **Amira**).
+4. Create a session (note the `session_id`).
+5. Record ~60 seconds (targets ~50 Hz).
+6. Upload.
+7. Compute.
+8. View the report in iOS and/or on the web dashboard.
+
+If the dashboard is empty, refresh the sessions list after creating a session via iOS.
+
+---
+
 ## Local Development
 
 ### Prerequisites
