@@ -1,45 +1,49 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import Response
-from sqlalchemy.orm import Session
-from typing import List
-
-from ..db import get_db, Base, engine
-from ..models import (
-    Session as SessionModel,
-    Horse,
-    SessionStatus,
-    FeatureWindow,
-    AnomalyEvent,
-    SensorReading,
-    Baseline,
-    AnomalyMethod,
-)
-from ..schemas import (
-    SessionCreate,
-    SessionOut,
-    FeatureWindowOut,
-    AnomalyOut,
-    FeatureWindowExport,
-    ComputeResponseOut,
-    ComputeReportOut,
-    ComputeReportMetricsOut,
-    ComputeReportBaselineOut,
-    BaselineToggleIn,
-)
-from ..services.features import window_ranges, compute_features
-from ..services.anomaly import robust_score, severity_from_score
-from sqlalchemy import select, func
 import csv
 import io
-import numpy as np
 from datetime import datetime
+from typing import List
+
+import numpy as np
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+
+from ..db import Base, engine, get_db
+from ..models import (
+    AnomalyEvent,
+    AnomalyMethod,
+    Baseline,
+    FeatureWindow,
+    Horse,
+    SensorReading,
+    SessionStatus,
+)
+from ..models import (
+    Session as SessionModel,
+)
+from ..schemas import (
+    AnomalyOut,
+    BaselineToggleIn,
+    ComputeReportBaselineOut,
+    ComputeReportMetricsOut,
+    ComputeReportOut,
+    ComputeResponseOut,
+    FeatureWindowExport,
+    FeatureWindowOut,
+    SessionCreate,
+    SessionOut,
+)
+from ..services.anomaly import robust_score, severity_from_score
+from ..services.features import compute_features, window_ranges
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 Base.metadata.create_all(bind=engine)
 
 FEATURES_FOR_BASELINE = ["cadence_spm", "stride_var", "asymmetry_proxy"]
+
 
 def _get_baseline(db: Session, horse_id: int) -> dict[str, tuple[float | None, float | None]]:
     """
@@ -57,16 +61,19 @@ def _get_baseline(db: Session, horse_id: int) -> dict[str, tuple[float | None, f
         out[str(name)] = (float(med), float(mad))
     return out
 
+
 def _safe_score(value: float | None, median: float | None, mad: float | None) -> float:
     if value is None or median is None or mad is None:
         return 0.0
     return robust_score(float(value), float(median), float(mad))
+
 
 def _iqr(vals: np.ndarray) -> float | None:
     if vals.size == 0:
         return None
     q75, q25 = np.percentile(vals, [75, 25])
     return float(q75 - q25)
+
 
 def _overall_label(windows: int, low: int, med_high: int, high: int) -> str:
     if windows <= 0:
@@ -86,6 +93,7 @@ def _overall_label(windows: int, low: int, med_high: int, high: int) -> str:
         return "WATCH"
     return "NORMAL"
 
+
 @router.post("", response_model=SessionOut)
 def start_session(payload: SessionCreate, db: Session = Depends(get_db)):
     horse = db.get(Horse, payload.horse_id)
@@ -96,6 +104,7 @@ def start_session(payload: SessionCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(sess)
     return sess
+
 
 @router.post("/{session_id}/stop", response_model=SessionOut)
 def stop_session(session_id: int, db: Session = Depends(get_db)):
@@ -108,19 +117,20 @@ def stop_session(session_id: int, db: Session = Depends(get_db)):
     db.refresh(sess)
     return sess
 
+
 @router.get("", response_model=List[SessionOut])
 def list_sessions(db: Session = Depends(get_db)):
     q = db.execute(select(SessionModel).order_by(SessionModel.started_at.desc()))
     return [r[0] for r in q.all()]
 
+
 @router.get("/{session_id}/features", response_model=List[FeatureWindowOut])
 def get_features(session_id: int, db: Session = Depends(get_db)):
     q = db.execute(
-        select(FeatureWindow)
-        .where(FeatureWindow.session_id == session_id)
-        .order_by(FeatureWindow.ts_start.asc())
+        select(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(FeatureWindow.ts_start.asc())
     )
     return [r[0] for r in q.all()]
+
 
 @router.get("/{session_id}/anomalies", response_model=List[AnomalyOut])
 def get_anomalies(session_id: int, db: Session = Depends(get_db)):
@@ -132,49 +142,61 @@ def get_anomalies(session_id: int, db: Session = Depends(get_db)):
     )
     return [r[0] for r in q.all()]
 
+
 def _get_windows_for_export(session_id: int, db: Session) -> List[FeatureWindowExport]:
     q = db.execute(
-        select(FeatureWindow)
-        .where(FeatureWindow.session_id == session_id)
-        .order_by(FeatureWindow.ts_start.asc())
+        select(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(FeatureWindow.ts_start.asc())
     )
     return [r[0] for r in q.all()]
+
 
 @router.get("/{session_id}/export.json", response_model=List[FeatureWindowExport])
 def export_json(session_id: int, db: Session = Depends(get_db)):
     return _get_windows_for_export(session_id, db)
+
 
 @router.get("/{session_id}/export.csv")
 def export_csv(session_id: int, db: Session = Depends(get_db)):
     windows = _get_windows_for_export(session_id, db)
     output = io.StringIO()
     fieldnames = [
-        "id", "ts_start", "ts_end",
-        "cadence_spm", "stride_var", "asymmetry_proxy", "energy", "quality_flags",
-        "anomaly_score", "anomaly_severity", "anomaly_method"
+        "id",
+        "ts_start",
+        "ts_end",
+        "cadence_spm",
+        "stride_var",
+        "asymmetry_proxy",
+        "energy",
+        "quality_flags",
+        "anomaly_score",
+        "anomaly_severity",
+        "anomaly_method",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
     for w in windows:
         anom = w.anomaly
-        writer.writerow({
-            "id": w.id,
-            "ts_start": w.ts_start,
-            "ts_end": w.ts_end,
-            "cadence_spm": w.cadence_spm,
-            "stride_var": w.stride_var,
-            "asymmetry_proxy": w.asymmetry_proxy,
-            "energy": w.energy,
-            "quality_flags": w.quality_flags,
-            "anomaly_score": anom.score if anom else "",
-            "anomaly_severity": anom.severity if anom else "",
-            "anomaly_method": anom.method if anom else "",
-        })
+        writer.writerow(
+            {
+                "id": w.id,
+                "ts_start": w.ts_start,
+                "ts_end": w.ts_end,
+                "cadence_spm": w.cadence_spm,
+                "stride_var": w.stride_var,
+                "asymmetry_proxy": w.asymmetry_proxy,
+                "energy": w.energy,
+                "quality_flags": w.quality_flags,
+                "anomaly_score": anom.score if anom else "",
+                "anomaly_severity": anom.severity if anom else "",
+                "anomaly_method": anom.method if anom else "",
+            }
+        )
     return Response(
         content=output.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=session_{session_id}_windows.csv"},
     )
+
 
 @router.post("/{session_id}/baseline", response_model=SessionOut)
 def set_session_baseline(session_id: int, payload: BaselineToggleIn, db: Session = Depends(get_db)):
@@ -186,6 +208,7 @@ def set_session_baseline(session_id: int, payload: BaselineToggleIn, db: Session
     db.refresh(sess)
     return sess
 
+
 @router.post("/{session_id}/compute", response_model=ComputeResponseOut)
 def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)):
     sess = db.get(SessionModel, session_id)
@@ -193,8 +216,9 @@ def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)
         raise HTTPException(status_code=404, detail="Session not found")
 
     q = db.execute(
-        select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms))
-        .where(SensorReading.session_id == session_id)
+        select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms)).where(
+            SensorReading.session_id == session_id
+        )
     )
     first_ts, last_ts = q.first()
 
@@ -268,7 +292,7 @@ def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)
 
     created_windows = 0
 
-    for (s, e) in ranges:
+    for s, e in ranges:
         rows = db.execute(
             select(
                 SensorReading.ts_ms,
@@ -395,15 +419,21 @@ def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)
 
     explanations: list[str] = []
     if baseline["asymmetry_proxy"][0] is None:
-        explanations.append("No baseline found yet. Mark baseline sessions and recompute baseline for better reliability.")
+        explanations.append(
+            "No baseline found yet. Mark baseline sessions and recompute baseline for better reliability."
+        )
     if gap_windows > 0:
         explanations.append("Some windows had sensor gaps (>200ms). Results may be less reliable.")
     if label == "NORMAL":
         explanations.append("Metrics are within baseline ranges; trot looks consistent.")
     elif label == "WATCH":
-        explanations.append("Some deviation from baseline detected. Consider retesting on consistent footing and speed.")
+        explanations.append(
+            "Some deviation from baseline detected. Consider retesting on consistent footing and speed."
+        )
     else:
-        explanations.append("Significant deviation from baseline detected. Consider veterinary/professional review if persistent.")
+        explanations.append(
+            "Significant deviation from baseline detected." " Consider veterinary/professional review if persistent."
+        )
 
     # feature-specific explanations
     if baseline["asymmetry_proxy"][0] is not None and asym_arr.size:

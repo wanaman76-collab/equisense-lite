@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from typing import List, Tuple
+
 import numpy as np
 
 WINDOW_SEC = 10
 HOP_SEC = 5
+
 
 def window_ranges(first_ts: int, last_ts: int) -> List[Tuple[int, int]]:
     W = WINDOW_SEC * 1000
@@ -12,6 +15,7 @@ def window_ranges(first_ts: int, last_ts: int) -> List[Tuple[int, int]]:
         return []
     starts = range(first_ts, last_ts - W + 1, H)
     return [(s, s + W) for s in starts]
+
 
 def _confidence_from_cadence(cadence_spm: float | None, gaps: int) -> str:
     if cadence_spm is None:
@@ -24,6 +28,7 @@ def _confidence_from_cadence(cadence_spm: float | None, gaps: int) -> str:
     if 60 <= cadence_spm <= 260:
         return "MEDIUM"
     return "LOW"
+
 
 def compute_features(readings: np.ndarray) -> dict:
     """

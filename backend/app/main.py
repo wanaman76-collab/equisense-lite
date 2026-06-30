@@ -22,10 +22,7 @@ Base.metadata.create_all(bind=engine)
 try:
     with engine.begin() as conn:
         conn.execute(
-            text(
-                "ALTER TABLE sessions "
-                "ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE"
-            )
+            text("ALTER TABLE sessions " "ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE")
         )
 except SQLAlchemyError:
     # If anything unexpected happens, don't crash the server startup.

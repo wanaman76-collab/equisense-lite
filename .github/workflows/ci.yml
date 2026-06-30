@@ -2,7 +2,7 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  test:
+  backend-lint:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -12,7 +12,39 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install backend deps
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          cd backend
+          python -m ruff check app/
+
+      - name: Format check (black)
+        run: |
+          cd backend
+          python -m black --check app/
+
+  backend-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
           cache: "pip"
           cache-dependency-path: |
             backend/requirements.txt
@@ -49,6 +81,16 @@ jobs:
         run: |
           cd frontend
           npm ci
+
+      - name: Type check (tsc)
+        run: |
+          cd frontend
+          npx tsc --noEmit
+
+      - name: Run frontend tests
+        run: |
+          cd frontend
+          npm test
 
       - name: Build frontend
         run: |

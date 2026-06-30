@@ -3,8 +3,25 @@
 EquiSense Lite is a lightweight prototype for recording equine IMU sessions and producing basic anomaly analytics.
 
 ## Stack
-- Backend: FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL in production)
-- Frontend: React (Vite)
+- Backend: FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL in production) · Python 3.12
+- Frontend: React (Vite) · TypeScript
+
+---
+
+## Developer Quick-Start (Makefile)
+
+> Requires `make` (pre-installed on macOS/Linux; Windows: use WSL or Git Bash).
+
+```bash
+make backend-install   # install Python deps
+make backend-check     # lint (ruff) + format-check (black) + tests
+make frontend-install  # npm ci
+make frontend-test     # vitest
+make dev-backend       # uvicorn --reload
+make dev-frontend      # vite dev server
+```
+
+Run `make help` to see all available targets.
 
 ---
 
@@ -42,7 +59,7 @@ If the dashboard is empty, refresh the sessions list after creating a session vi
 ## Local Development
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.12+
 - Node.js 18+
 
 ### Backend

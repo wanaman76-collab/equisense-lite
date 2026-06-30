@@ -1,24 +1,29 @@
 from __future__ import annotations
-from datetime import datetime
-from sqlalchemy import (
-    String, Float, DateTime, ForeignKey, UniqueConstraint, Enum, JSON, BigInteger, Boolean
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from .db import Base
+
 import enum
+from datetime import datetime
+
+from sqlalchemy import JSON, BigInteger, Boolean, DateTime, Enum, Float, ForeignKey, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from .db import Base
+
 
 class SessionStatus(str, enum.Enum):
     DRAFT = "DRAFT"
     COMPLETED = "COMPLETED"
+
 
 class Severity(str, enum.Enum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
 
+
 class AnomalyMethod(str, enum.Enum):
     STATS = "STATS"
     FUSION = "FUSION"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -26,12 +31,14 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     role_scopes: Mapped[str] = mapped_column(String(80), default="ingestion,analytics")
 
+
 class Horse(Base):
     __tablename__ = "horses"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
     notes: Mapped[str | None] = mapped_column(String(500), default=None)
     sessions: Mapped[list["Session"]] = relationship(back_populates="horse")
+
 
 class Session(Base):
     __tablename__ = "sessions"
@@ -53,6 +60,7 @@ class Session(Base):
     readings: Mapped[list["SensorReading"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     windows: Mapped[list["FeatureWindow"]] = relationship(back_populates="session", cascade="all, delete-orphan")
 
+
 class SensorReading(Base):
     __tablename__ = "sensor_readings"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -68,6 +76,7 @@ class SensorReading(Base):
     session: Mapped["Session"] = relationship(back_populates="readings")
 
     __table_args__ = (UniqueConstraint("session_id", "ts_ms", name="uq_reading_session_ts"),)
+
 
 class FeatureWindow(Base):
     __tablename__ = "feature_windows"
@@ -86,6 +95,7 @@ class FeatureWindow(Base):
 
     __table_args__ = (UniqueConstraint("session_id", "ts_start", name="uq_window_unique"),)
 
+
 class AnomalyEvent(Base):
     __tablename__ = "anomalies"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -97,6 +107,7 @@ class AnomalyEvent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     window: Mapped["FeatureWindow"] = relationship(back_populates="anomaly")
+
 
 class Baseline(Base):
     __tablename__ = "baselines"
