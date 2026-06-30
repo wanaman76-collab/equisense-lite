@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.db import Base, engine, SessionLocal
+from app.db import Base, SessionLocal, engine
 from app.models import Horse  # ensure all models are imported
 
 
