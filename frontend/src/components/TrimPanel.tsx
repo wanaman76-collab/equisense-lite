@@ -7,6 +7,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { updateTrim } from '../api/client'
 import type { TrimOut } from '../types/api'
 import { btnStyle, sectionStyle } from './styles'
 
@@ -28,12 +29,14 @@ const HANDLE_WIDTH = 12
 const MIN_WINDOW_MS = 3_000
 
 function msToDisplay(ms: number): string {
-  const totalSec = Math.floor(ms / 1000)
+  const absMs = Math.abs(ms)
+  const totalSec = Math.floor(absMs / 1000)
   const min = Math.floor(totalSec / 60)
   const sec = totalSec % 60
-  const rem = ms % 1000
-  if (min > 0) return `${min}m ${sec}.${String(rem).padStart(3, '0')}s`
-  return `${sec}.${String(rem).padStart(3, '0')}s`
+  const rem = absMs % 1000
+  const sign = ms < 0 ? '-' : ''
+  if (min > 0) return `${sign}${min}m ${sec}.${String(rem).padStart(3, '0')}s`
+  return `${sign}${sec}.${String(rem).padStart(3, '0')}s`
 }
 
 export function TrimPanel({
@@ -105,7 +108,6 @@ export function TrimPanel({
     if (!token || busy) return
     setBusy(true)
     try {
-      const { updateTrim } = await import('../api/client')
       const result = await updateTrim(token, sessionId, {
         trim_start_ms: trimStart,
         trim_end_ms: trimEnd,
@@ -122,7 +124,6 @@ export function TrimPanel({
     if (!token || busy || effectiveDuration === 0) return
     setBusy(true)
     try {
-      const { updateTrim } = await import('../api/client')
       const result = await updateTrim(token, sessionId, {
         trim_start_ms: 0,
         trim_end_ms: effectiveDuration,

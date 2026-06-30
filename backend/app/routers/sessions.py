@@ -181,7 +181,7 @@ def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)
         session_id=session_id,
         horse_id=sess.horse_id,
         db=db,
-        trim_start_ms=sess.trim_start_ms if sess.trim_start_ms else None,
+        trim_start_ms=sess.trim_start_ms if sess.trim_start_ms is not None else None,
         trim_end_ms=sess.trim_end_ms,
     )
 
@@ -238,7 +238,7 @@ def update_session_trim(session_id: int, payload: TrimIn, db: Session = Depends(
             detail=f"Trimmed window is too short ({trimmed_duration_ms} ms). Minimum is {TRIM_MIN_WINDOW_MS} ms.",
         )
 
-    # trim_end_ms is relative to session start (first sensor timestamp).
+    # Both trim_start_ms and trim_end_ms are offsets (ms) relative to the first sensor timestamp.
     effective_start = int(first_ts) + payload.trim_start_ms
     effective_end = int(first_ts) + payload.trim_end_ms
 

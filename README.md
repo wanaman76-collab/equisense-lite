@@ -265,7 +265,57 @@ Returns `ingest_count`, `broadcast_count`, `coalesced_count`, `queue_drop_count`
 
 ---
 
-## Deployment
+## Phase 7 — Session Trimming (Video-style)
+
+Phase 7 adds **non-destructive start/end trimming** for recorded sessions so analytics and summaries are computed only from the selected steady-state middle window, while raw sensor samples are always preserved.
+
+### How it works
+
+1. After a session is recorded, click **View** to open session details.
+2. A **✂️ Trim Session** panel appears below the compute report:
+   - A colour-coded **timeline bar** shows the full raw duration (grey) with the kept window highlighted in green.
+   - Two **draggable handles** (blue) mark the trim start and end.
+   - Numeric **Start (ms)** / **End (ms)** inputs allow precise entry.
+3. Click **✓ Apply Trim** to save the window and immediately recompute analytics over it.
+4. Click **↺ Reset Trim** to restore the full session duration.
+5. All displayed metrics reflect the trimmed window after apply.
+
+Raw sensor data is never deleted. The trim window is stored as `trim_start_ms` / `trim_end_ms` metadata on the session record and can be re-applied at any time.
+
+### API contract
+
+```
+PATCH /sessions/{id}/trim
+Header: X-API-Token: <token>
+Body:   { "trim_start_ms": 5000, "trim_end_ms": 45000 }
+```
+
+**Validation rules**
+- `0 <= trim_start_ms < trim_end_ms`
+- `trimmed_duration_ms >= 3 000 ms` (minimum steady-state window)
+- `trim_end_ms` must not exceed the raw sensor data duration
+
+**Response**
+```json
+{
+  "session_id": 42,
+  "trim_start_ms": 5000,
+  "trim_end_ms": 45000,
+  "raw_duration_ms": 60000,
+  "trimmed_duration_ms": 40000,
+  "metrics": { "windows": 4, "anomalies_total": 0, "report": { "..." } }
+}
+```
+
+### iOS compatibility
+
+The `trim_start_ms` and `trim_end_ms` fields are returned in all `SessionOut` responses (default: `0` and `null`). Existing iOS code that does not read these fields is unaffected. A future iOS v1 can call `PATCH /sessions/{id}/trim` with a numeric input to save the trim window.
+
+### Database migration
+
+Run `alembic upgrade head` to add the `trim_start_ms` (BigInteger, default 0) and `trim_end_ms` (BigInteger, nullable) columns to the `sessions` table.
+
+---
 
 ### Backend → Render (free tier)
 
