@@ -373,7 +373,7 @@ class TestCoalescingPolicy:
                 await mgr.broadcast(session_id, {"type": "samples", "readings": [{"ts_ms": i}]})
             return mgr.get_metrics(session_id)
 
-        metrics = asyncio.get_event_loop().run_until_complete(_run())
+        metrics = asyncio.run(_run())
         # At least some calls should have been coalesced (rate > 1/50ms)
         assert metrics.ingest_count == 5
         assert metrics.broadcast_count + metrics.coalesced_count == metrics.ingest_count

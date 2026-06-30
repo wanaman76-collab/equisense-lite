@@ -114,7 +114,7 @@ class _SubscriberState:
         self.ws = ws
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=_SUBSCRIBER_QUEUE_SIZE)
         self.queue_drops: int = 0
-        self._task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
+        self._task: Optional[asyncio.Task[None]] = None
 
     def start_drain(self) -> None:
         """Create and schedule the background drain task."""
