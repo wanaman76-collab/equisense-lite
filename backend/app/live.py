@@ -33,9 +33,7 @@ from typing import Dict, List, Optional
 
 from fastapi import WebSocket
 
-_MIN_BROADCAST_INTERVAL: float = float(
-    os.getenv("LIVE_MIN_BROADCAST_INTERVAL", "0.05")
-)
+_MIN_BROADCAST_INTERVAL: float = float(os.getenv("LIVE_MIN_BROADCAST_INTERVAL", "0.05"))
 _SUBSCRIBER_QUEUE_SIZE: int = int(os.getenv("LIVE_SUBSCRIBER_QUEUE_SIZE", "50"))
 
 _RATE_WINDOW_S: float = 5.0  # rolling window length for rate calculations
