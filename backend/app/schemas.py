@@ -183,3 +183,16 @@ class LiveIngestBatch(BaseModel):
 class LiveIngestResponse(BaseModel):
     broadcasted: int
     subscribers: int
+
+
+class LiveStatsOut(BaseModel):
+    """Live-feed metrics for a single session, returned by GET /sessions/{id}/live/stats."""
+
+    session_id: int
+    active_subscribers: int
+    ingest_count: int
+    broadcast_count: int
+    coalesced_count: int
+    queue_drop_count: int
+    ingest_rate_per_s: float
+    broadcast_rate_per_s: float

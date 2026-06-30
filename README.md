@@ -185,15 +185,16 @@ No additional entitlements or provisioning profiles are needed for personal/deve
 ## Live Feed — iPhone → Backend → Mac Dashboard
 
 Phase 6 adds real-time streaming from the iOS recorder to the Mac web dashboard.
+Phase 6.1 hardens reliability, adds observability, and optimises for MacBook + iPhone LAN use.
 
 ### How it works
 
 ```
 iPhone (recording)
   └─→ POST /sessions/{id}/live-ingest  (every ~200 ms)
-        └─→ FastAPI live hub
+        └─→ FastAPI live hub (per-session metrics, per-subscriber bounded queue)
               └─→ WS broadcast → Mac browser
-                    └─→ LiveFeedPanel (rolling chart)
+                    └─→ LiveFeedPanel (rolling chart, health bar, pause/resume)
 ```
 
 ### Quick start (local LAN)
@@ -221,6 +222,32 @@ iPhone (recording)
 
 7. **Stop recording** on iOS to end the live feed. The final upload and compute run automatically.
 
+### Phase 6.1 health indicators
+
+The live panel shows a health bar with:
+
+| Indicator | Meaning |
+|-----------|---------|
+| **Rate** | Effective sample rate (Hz) received at the browser. Expect ~50 Hz. |
+| **Latency** | `now − latest sample ts_ms` end-to-end delay. Green < 500 ms. |
+| **Buffer** | Samples in the rolling window (max 1 500). |
+
+Use **⏸ Pause** to freeze the chart without disconnecting; click **▶ Resume** to continue.
+
+### Stream-metrics endpoint (ops / debug)
+
+```
+GET /sessions/{session_id}/live/stats
+Header: X-API-Token: <token>
+```
+
+Returns `ingest_count`, `broadcast_count`, `coalesced_count`, `queue_drop_count`, and rolling rates.
+
+### Backpressure and coalescing
+
+- **Coalescing**: broadcasts faster than 50 ms are coalesced (configurable via `LIVE_MIN_BROADCAST_INTERVAL`).
+- **Backpressure** (drop-oldest): each subscriber has a bounded queue (default 50 items). If a browser tab is slow, its queue fills and oldest items are dropped — other subscribers are unaffected.
+
 ### Troubleshooting
 
 | Problem | Fix |
@@ -230,6 +257,11 @@ iPhone (recording)
 | Firewall blocking connection | Allow incoming on port 8000 in macOS System Settings → Network → Firewall options |
 | wss:// vs ws:// | For local LAN dev use `http://` base URL — the live WS uses `ws://`. For production (Render) the frontend will upgrade to `wss://` automatically via the `VITE_API_URL` env var |
 | Panel doesn't appear | A session must be active (started via "Start" button or iOS). The panel is only shown while `sessionId` is set |
+| High latency or stutter | Check `coalesced_count` in the stats endpoint; reduce `LIVE_MIN_BROADCAST_INTERVAL` if needed |
+| Chart frozen | Click **▶ Resume** if the Pause button is active |
+
+> **Full LAN runbook**: see [docs/lan-ops.md](docs/lan-ops.md) for detailed firewall steps,
+> troubleshooting matrix, and environment variable reference.
 
 ---
 

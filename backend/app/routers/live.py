@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..live import live_manager
 from ..models import Session as SessionModel
-from ..schemas import LiveIngestBatch, LiveIngestResponse
+from ..schemas import LiveIngestBatch, LiveIngestResponse, LiveStatsOut
 
 router = APIRouter(prefix="/sessions", tags=["live"])
 
@@ -117,13 +117,22 @@ async def live_ingest(
     This endpoint does **not** persist data to the database.  Use ``POST /ingest``
     for the final upload and persistence path.
 
+    Pre-processing applied before broadcast:
+    - Readings with ``ts_ms <= 0`` are silently discarded (malformed timestamp).
+    - Remaining readings are sorted ascending by ``ts_ms`` to smooth out
+      out-of-order delivery from the network.
+
     Returns the number of readings broadcast and current subscriber count.
     """
     sess = db.get(SessionModel, session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    if not batch.readings:
+    # Filter malformed timestamps and sort for monotonic delivery.
+    valid = [r for r in batch.readings if r.ts_ms > 0]
+    valid.sort(key=lambda r: r.ts_ms)
+
+    if not valid:
         return LiveIngestResponse(
             broadcasted=0,
             subscribers=live_manager.subscriber_count(session_id),
@@ -132,10 +141,41 @@ async def live_ingest(
     payload = {
         "type": "samples",
         "session_id": session_id,
-        "readings": [r.model_dump() for r in batch.readings],
+        "readings": [r.model_dump() for r in valid],
     }
     await live_manager.broadcast(session_id, payload)
     return LiveIngestResponse(
-        broadcasted=len(batch.readings),
+        broadcasted=len(valid),
         subscribers=live_manager.subscriber_count(session_id),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Live-feed stats endpoint (ops / debugging)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{session_id}/live/stats", response_model=LiveStatsOut)
+def live_stats(
+    session_id: int,
+    db: Session = Depends(get_db),
+) -> LiveStatsOut:
+    """Return live-feed metrics for *session_id*.
+
+    Auth: protected by the ``X-API-Token`` HTTP middleware (same as all
+    other non-WebSocket endpoints).
+
+    The counters are cumulative since the last process restart.  Rates
+    are computed over a rolling 5-second window and will be ``0.0`` when
+    no traffic has been seen recently.
+    """
+    sess = db.get(SessionModel, session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    m = live_manager.get_metrics(session_id)
+    return LiveStatsOut(
+        session_id=session_id,
+        active_subscribers=live_manager.subscriber_count(session_id),
+        **m.to_dict(),
     )

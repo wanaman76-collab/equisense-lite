@@ -4,6 +4,11 @@
  * Renders a rolling SVG line chart for accel magnitude and gyro magnitude
  * over a bounded window (~30 s at 50 Hz).  Shows clear state labels:
  * connecting, live, stalled, disconnected.
+ *
+ * Phase 6.1 additions:
+ * - Live health bar: connection state, effective sample rate, estimated latency.
+ * - Pause / resume visualization without disconnecting the transport.
+ * - Reconnect countdown during exponential-backoff waits.
  */
 
 import React, { useMemo } from 'react'
@@ -60,17 +65,38 @@ const STATE_COLOR: Record<LiveConnectionState, string> = {
   disconnected: '#f44336',
 }
 
-const STATE_LABEL: Record<LiveConnectionState, string> = {
-  connecting: '⏳ Connecting…',
-  live: '🟢 Live',
-  stalled: '🟡 Stalled – no data',
-  disconnected: '🔴 Disconnected – retrying…',
+function statusLabel(
+  state: LiveConnectionState,
+  reconnectIn: number | null,
+): string {
+  if (state === 'disconnected') {
+    if (reconnectIn !== null && reconnectIn > 0) {
+      return `🔴 Disconnected – retry in ${Math.ceil(reconnectIn / 1000)}s`
+    }
+    return '🔴 Disconnected – retrying…'
+  }
+  const labels: Record<LiveConnectionState, string> = {
+    connecting: '⏳ Connecting…',
+    live: '🟢 Live',
+    stalled: '🟡 Stalled – no data',
+    disconnected: '🔴 Disconnected',
+  }
+  return labels[state]
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function LiveFeedPanel({ sessionId, token }: Props) {
-  const { samples, connectionState, clearBuffer } = useLiveFeed({ sessionId, token })
+  const {
+    samples,
+    connectionState,
+    clearBuffer,
+    paused,
+    setPaused,
+    latencyMs,
+    sampleRateHz,
+    reconnectIn,
+  } = useLiveFeed({ sessionId, token })
 
   const accelMag = useMemo(
     () =>
@@ -90,7 +116,8 @@ export function LiveFeedPanel({ sessionId, token }: Props) {
 
   return (
     <div style={sectionStyle}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+      {/* ── Header row ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
         <strong>📡 Live Feed — Session #{sessionId}</strong>
         <span
           style={{
@@ -99,16 +126,67 @@ export function LiveFeedPanel({ sessionId, token }: Props) {
             fontWeight: 600,
           }}
         >
-          {STATE_LABEL[connectionState]}
+          {statusLabel(connectionState, reconnectIn)}
         </span>
         <button
-          onClick={clearBuffer}
+          onClick={() => setPaused(!paused)}
+          title={paused ? 'Resume visualization' : 'Pause visualization (transport stays connected)'}
           style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}
+        >
+          {paused ? '▶ Resume' : '⏸ Pause'}
+        </button>
+        <button
+          onClick={clearBuffer}
+          style={{ fontSize: 11, padding: '2px 8px', cursor: 'pointer' }}
         >
           Clear
         </button>
       </div>
 
+      {/* ── Health bar ── */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 16,
+          fontSize: 11,
+          color: '#888',
+          marginBottom: 8,
+          flexWrap: 'wrap',
+        }}
+      >
+        <span>
+          Rate:{' '}
+          <span style={{ color: '#ccc' }}>
+            {sampleRateHz !== null ? `${sampleRateHz} Hz` : '—'}
+          </span>
+        </span>
+        <span>
+          Latency:{' '}
+          <span
+            style={{
+              color:
+                latencyMs === null
+                  ? '#ccc'
+                  : latencyMs < 500
+                  ? '#4caf50'
+                  : latencyMs < 2000
+                  ? '#ff9800'
+                  : '#f44336',
+            }}
+          >
+            {latencyMs !== null ? `${latencyMs} ms` : '—'}
+          </span>
+        </span>
+        <span>
+          Buffer:{' '}
+          <span style={{ color: '#ccc' }}>{samples.length} samples</span>
+        </span>
+        {paused && (
+          <span style={{ color: '#ff9800', fontWeight: 600 }}>⏸ Paused</span>
+        )}
+      </div>
+
+      {/* ── Charts ── */}
       {samples.length === 0 && connectionState !== 'disconnected' ? (
         <p style={{ color: '#888', fontSize: 13, margin: 0 }}>
           Waiting for live samples from the recording device…
