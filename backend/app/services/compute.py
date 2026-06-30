@@ -136,7 +136,13 @@ def _build_empty_response(reason: str) -> ComputeResponseOut:
 # ---------------------------------------------------------------------------
 
 
-def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeResponseOut:
+def run_compute(
+    session_id: int,
+    horse_id: int,
+    db: DBSession,
+    trim_start_ms: Optional[int] = None,
+    trim_end_ms: Optional[int] = None,
+) -> ComputeResponseOut:
     """Compute feature windows and anomaly scores for *session_id*.
 
     Idempotent: re-running on the same session updates existing records
@@ -145,6 +151,10 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
     Performance: all sensor readings for the session are fetched in a
     *single* query and then sliced per-window in memory, avoiding the
     previous N+1 database query pattern (one query per window).
+
+    When *trim_start_ms* and *trim_end_ms* are provided the computation is
+    restricted to sensor readings within that window, enabling non-destructive
+    "video-style" trimming of the session (Phase 7).
 
     Returns a :class:`ComputeResponseOut` containing per-window counts and
     the aggregated report.
@@ -160,13 +170,17 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
     if first_ts is None or last_ts is None:
         return _build_empty_response("No sensor data found for session.")
 
-    ranges = window_ranges(int(first_ts), int(last_ts))
+    # Apply trim window, falling back to full duration when not provided.
+    effective_start = int(trim_start_ms) if trim_start_ms is not None else int(first_ts)
+    effective_end = int(trim_end_ms) if trim_end_ms is not None else int(last_ts)
+
+    ranges = window_ranges(effective_start, effective_end)
     if not ranges:
         return _build_empty_response("Not enough data to form a 10s analysis window.")
 
     baseline = _get_baseline(db, horse_id)
 
-    # ── 2. Batch-fetch ALL readings for the session in one query ──────────
+    # ── 2. Batch-fetch readings within the effective trim window ──────────
     all_rows = db.execute(
         select(
             SensorReading.ts_ms,
@@ -177,7 +191,11 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
             SensorReading.gy,
             SensorReading.gz,
         )
-        .where(SensorReading.session_id == session_id)
+        .where(
+            SensorReading.session_id == session_id,
+            SensorReading.ts_ms >= effective_start,
+            SensorReading.ts_ms <= effective_end,
+        )
         .order_by(SensorReading.ts_ms.asc())
     ).all()
 

@@ -24,6 +24,9 @@ export interface SessionOut {
   stopped_at: string | null
   status: SessionStatus
   is_baseline: boolean | null
+  /** Phase 7: trim window in ms relative to first sensor timestamp. null = not set (full duration). */
+  trim_start_ms: number | null
+  trim_end_ms: number | null
 }
 
 export interface IngestItem {
@@ -109,6 +112,22 @@ export interface ComputeResponse {
   anomalies_total: number
   anomalies_medium_high: number
   report: ComputeReport
+}
+
+// ── Phase 7: Session trim ──────────────────────────────────────────────────────
+
+export interface TrimIn {
+  trim_start_ms: number
+  trim_end_ms: number
+}
+
+export interface TrimOut {
+  session_id: number
+  trim_start_ms: number
+  trim_end_ms: number
+  raw_duration_ms: number
+  trimmed_duration_ms: number
+  metrics: ComputeResponse
 }
 
 // ── Live feed ─────────────────────────────────────────────────────────────────

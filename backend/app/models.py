@@ -56,6 +56,15 @@ class Session(Base):
     # ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE;
     is_baseline: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # Phase 7: non-destructive trim window (milliseconds from session start).
+    # trim_start_ms defaults to 0; trim_end_ms defaults to None (= full duration).
+    # Raw sensor samples are never deleted; analytics recompute over [trim_start_ms, trim_end_ms].
+    # NOTE: requires DB migration on existing DBs:
+    # ALTER TABLE sessions ADD COLUMN IF NOT EXISTS trim_start_ms BIGINT NOT NULL DEFAULT 0;
+    # ALTER TABLE sessions ADD COLUMN IF NOT EXISTS trim_end_ms BIGINT;
+    trim_start_ms: Mapped[int] = mapped_column(BigInteger, default=0)
+    trim_end_ms: Mapped[int | None] = mapped_column(BigInteger, default=None)
+
     horse: Mapped["Horse"] = relationship(back_populates="sessions")
     readings: Mapped[list["SensorReading"]] = relationship(back_populates="session", cascade="all, delete-orphan")
     windows: Mapped[list["FeatureWindow"]] = relationship(back_populates="session", cascade="all, delete-orphan")
