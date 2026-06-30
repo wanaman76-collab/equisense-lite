@@ -8,13 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..db import Base, engine, get_db
+from ..db import get_db
 from ..models import Baseline, FeatureWindow, Horse
 from ..models import Session as SessionModel
 from ..schemas import HorseCreate, HorseOut, HorseUpdate
 
 router = APIRouter(prefix="/horses", tags=["horses"])
-Base.metadata.create_all(bind=engine)
 
 BASELINE_FEATURES = ["cadence_spm", "stride_var", "asymmetry_proxy"]
 

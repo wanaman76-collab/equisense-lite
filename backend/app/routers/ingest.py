@@ -4,13 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..db import Base, engine, get_db
+from ..db import get_db
 from ..models import SensorReading
 from ..models import Session as SessionModel
 from ..schemas import IngestBatch
 
 router = APIRouter(prefix="/ingest", tags=["ingest"])
-Base.metadata.create_all(bind=engine)
 
 
 @router.post("")

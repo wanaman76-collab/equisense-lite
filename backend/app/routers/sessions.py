@@ -11,7 +11,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..db import Base, engine, get_db
+from ..db import get_db
 from ..models import (
     AnomalyEvent,
     AnomalyMethod,
@@ -40,7 +40,6 @@ from ..services.anomaly import robust_score, severity_from_score
 from ..services.features import compute_features, window_ranges
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-Base.metadata.create_all(bind=engine)
 
 FEATURES_FOR_BASELINE = ["cadence_spm", "stride_var", "asymmetry_proxy"]
 

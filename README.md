@@ -70,6 +70,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -79,6 +80,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -86,6 +88,9 @@ The API will be available at `http://localhost:8000`.
 Swagger docs: `http://localhost:8000/docs`
 
 The default API token for local dev is `dev-token` (set via `API_TOKEN` env var, defaults to `dev-token`).
+
+> **Migrations:** Schema is managed by Alembic. Run `alembic upgrade head` before starting the server.
+> See [docs/migrations.md](docs/migrations.md) for details.
 
 ### Frontend
 

@@ -4,30 +4,16 @@ import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
-from .db import Base, engine
 from .routers import horses, ingest, sessions
 
 app = FastAPI(title="EquiSense Lite API")
 
-# Create tables (fresh DB)
-Base.metadata.create_all(bind=engine)
-
-# Minimal migration:
-# Ensure sessions.is_baseline exists for older DBs.
-# Works on Postgres (IF NOT EXISTS) and won't break if already present.
-try:
-    with engine.begin() as conn:
-        conn.execute(
-            text("ALTER TABLE sessions " "ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE")
-        )
-except SQLAlchemyError:
-    # If anything unexpected happens, don't crash the server startup.
-    # (But endpoints may still error; check logs.)
-    pass
+# Schema lifecycle is managed by Alembic migrations.
+# Run `alembic upgrade head` before starting the server (or in CI/deploy pipelines).
+# For local dev: `make migrate-upgrade`
+# Do NOT add Base.metadata.create_all() or manual ALTER TABLE statements here.
 
 # CORS: allow Netlify production + deploy previews + local dev
 app.add_middleware(
