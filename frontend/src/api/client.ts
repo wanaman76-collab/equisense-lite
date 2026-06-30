@@ -12,6 +12,8 @@ import type {
   IngestBatch,
   IngestResponse,
   SessionOut,
+  TrimIn,
+  TrimOut,
 } from '../types/api'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:8000'
@@ -115,4 +117,13 @@ export function ingestBatch(token: string, batch: IngestBatch): Promise<IngestRe
 
 export function recomputeBaseline(token: string, horseId: number): Promise<unknown> {
   return request<unknown>(`/horses/${horseId}/baseline/recompute`, token, { method: 'POST' })
+}
+
+// ── Phase 7: Session trim ─────────────────────────────────────────────────────
+
+export function updateTrim(token: string, sessionId: number, trim: TrimIn): Promise<TrimOut> {
+  return request<TrimOut>(`/sessions/${sessionId}/trim`, token, {
+    method: 'PATCH',
+    body: JSON.stringify(trim),
+  })
 }

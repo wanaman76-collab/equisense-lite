@@ -40,6 +40,9 @@ class SessionOut(BaseModel):
     stopped_at: Optional[datetime]
     status: str
     is_baseline: bool | None = None
+    # Phase 7: trim window metadata (None means not yet set; clients treat as full duration)
+    trim_start_ms: int | None = None
+    trim_end_ms: int | None = None
 
     class Config:
         from_attributes = True
@@ -196,3 +199,27 @@ class LiveStatsOut(BaseModel):
     queue_drop_count: int
     ingest_rate_per_s: float
     broadcast_rate_per_s: float
+
+
+# ---------- Phase 7: Session trim ----------
+
+# Minimum allowed trimmed window in milliseconds.
+TRIM_MIN_WINDOW_MS = 3_000
+
+
+class TrimIn(BaseModel):
+    """Request body for PATCH /sessions/{id}/trim."""
+
+    trim_start_ms: int
+    trim_end_ms: int
+
+
+class TrimOut(BaseModel):
+    """Response from PATCH /sessions/{id}/trim."""
+
+    session_id: int
+    trim_start_ms: int
+    trim_end_ms: int
+    raw_duration_ms: int
+    trimmed_duration_ms: int
+    metrics: ComputeResponseOut

@@ -9,13 +9,14 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
-from ..models import AnomalyEvent, FeatureWindow, Horse, SessionStatus
+from ..models import AnomalyEvent, FeatureWindow, Horse, SensorReading, SessionStatus
 from ..models import Session as SessionModel
 from ..schemas import (
+    TRIM_MIN_WINDOW_MS,
     AnomalyOut,
     BaselineToggleIn,
     ComputeResponseOut,
@@ -23,6 +24,8 @@ from ..schemas import (
     FeatureWindowOut,
     SessionCreate,
     SessionOut,
+    TrimIn,
+    TrimOut,
 )
 from ..services.compute import run_compute
 
@@ -174,4 +177,97 @@ def compute_windows_and_anomalies(session_id: int, db: Session = Depends(get_db)
     sess = db.get(SessionModel, session_id)
     if not sess:
         raise HTTPException(status_code=404, detail="Session not found")
-    return run_compute(session_id=session_id, horse_id=sess.horse_id, db=db)
+    return run_compute(
+        session_id=session_id,
+        horse_id=sess.horse_id,
+        db=db,
+        trim_start_ms=sess.trim_start_ms if sess.trim_start_ms else None,
+        trim_end_ms=sess.trim_end_ms,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Session trim
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/{session_id}/trim", response_model=TrimOut)
+def update_session_trim(session_id: int, payload: TrimIn, db: Session = Depends(get_db)):
+    """Set the trim window for a session and recompute analytics.
+
+    The trim window is stored as non-destructive metadata; raw sensor samples
+    are never deleted.  Analytics (feature windows, anomaly scores) are
+    recomputed using only samples within [trim_start_ms, trim_end_ms].
+
+    To reset the trim to the full session duration send trim_start_ms=0 and
+    trim_end_ms equal to the raw duration (or simply larger than the data).
+
+    Validation rules
+    ----------------
+    - 0 <= trim_start_ms < trim_end_ms
+    - trimmed_duration_ms >= TRIM_MIN_WINDOW_MS (default 3 s)
+    - trim_end_ms must not exceed the raw sensor data duration
+    """
+    sess = db.get(SessionModel, session_id)
+    if not sess:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # Determine actual raw data extents
+    row = db.execute(
+        select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms)).where(
+            SensorReading.session_id == session_id
+        )
+    ).first()
+    first_ts, last_ts = row if row else (None, None)
+
+    if first_ts is None or last_ts is None:
+        raise HTTPException(status_code=422, detail="Session has no sensor data to trim.")
+
+    raw_duration_ms = int(last_ts) - int(first_ts)
+
+    # Validate trim bounds
+    if payload.trim_start_ms < 0:
+        raise HTTPException(status_code=422, detail="trim_start_ms must be >= 0.")
+    if payload.trim_end_ms <= payload.trim_start_ms:
+        raise HTTPException(status_code=422, detail="trim_end_ms must be greater than trim_start_ms.")
+
+    trimmed_duration_ms = payload.trim_end_ms - payload.trim_start_ms
+    if trimmed_duration_ms < TRIM_MIN_WINDOW_MS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Trimmed window is too short ({trimmed_duration_ms} ms). Minimum is {TRIM_MIN_WINDOW_MS} ms.",
+        )
+
+    # trim_end_ms is relative to session start (first sensor timestamp).
+    effective_start = int(first_ts) + payload.trim_start_ms
+    effective_end = int(first_ts) + payload.trim_end_ms
+
+    if effective_end > int(last_ts):
+        raise HTTPException(
+            status_code=422,
+            detail=(f"trim_end_ms ({payload.trim_end_ms} ms) exceeds raw session duration ({raw_duration_ms} ms)."),
+        )
+
+    # Persist trim metadata
+    sess.trim_start_ms = payload.trim_start_ms
+    sess.trim_end_ms = payload.trim_end_ms
+    db.commit()
+    db.refresh(sess)
+
+    # Recompute analytics over trimmed window
+    metrics = run_compute(
+        session_id=session_id,
+        horse_id=sess.horse_id,
+        db=db,
+        trim_start_ms=effective_start,
+        trim_end_ms=effective_end,
+    )
+
+    return TrimOut(
+        session_id=session_id,
+        trim_start_ms=payload.trim_start_ms,
+        trim_end_ms=payload.trim_end_ms,
+        raw_duration_ms=raw_duration_ms,
+        trimmed_duration_ms=trimmed_duration_ms,
+        metrics=metrics,
+    )

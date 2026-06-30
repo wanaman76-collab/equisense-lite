@@ -19,11 +19,12 @@ import { LiveFeedPanel } from './components/LiveFeedPanel'
 import { SessionControls } from './components/SessionControls'
 import { SessionDetail } from './components/SessionDetail'
 import { SessionsTable } from './components/SessionsTable'
+import { TrimPanel } from './components/TrimPanel'
 import { StatusBar } from './components/UI'
 import { TokenSection } from './components/TokenSection'
 import { useStatus } from './hooks/useStatus'
 import { useToken } from './hooks/useToken'
-import type { AnomalyOut, ComputeResponse, FeatureWindowOut, SessionOut } from './types/api'
+import type { AnomalyOut, ComputeResponse, FeatureWindowOut, SessionOut, TrimOut } from './types/api'
 
 export default function App() {
   const { token, setToken } = useToken()
@@ -41,6 +42,9 @@ export default function App() {
   const [baselineRecomputeBusy, setBaselineRecomputeBusy] = useState(false)
   const [demoBusy, setDemoBusy] = useState(false)
   const [demoLastSessionId, setDemoLastSessionId] = useState<number | null>(null)
+  // Phase 7: trim state for the currently viewed session
+  const [selectedSession, setSelectedSession] = useState<SessionOut | undefined>()
+  const [rawDurationMs, setRawDurationMs] = useState(0)
 
   function handleError(e: unknown) {
     if (e instanceof ApiError) {
@@ -132,10 +136,43 @@ export default function App() {
       const [feat, anoms] = await Promise.all([getFeatures(token, id), getAnomalies(token, id)])
       setFeatures(feat)
       setAnomalies(anoms)
+      // Derive raw duration estimate from feature windows if available,
+      // otherwise fall back to session stopped_at - started_at.
+      const sessRecord = sessions.find((s) => s.id === id)
+      setSelectedSession(sessRecord)
+      if (feat.length > 0) {
+        const first = feat[0].ts_start
+        const last = feat[feat.length - 1].ts_end
+        setRawDurationMs(last - first)
+      } else if (sessRecord?.stopped_at && sessRecord?.started_at) {
+        setRawDurationMs(
+          new Date(sessRecord.stopped_at).getTime() - new Date(sessRecord.started_at).getTime(),
+        )
+      } else {
+        setRawDurationMs(0)
+      }
       setStatus(`Loaded details for session #${id}.`)
     } catch (e) {
       handleError(e)
     }
+  }
+
+  function handleTrimApplied(result: TrimOut) {
+    setComputeResult(result.metrics)
+    setStatus(
+      `Trim applied ✓  Kept ${result.trimmed_duration_ms} ms of ${result.raw_duration_ms} ms. ` +
+        `Overall: ${result.metrics.report.overall_label}.`,
+    )
+    // Update selectedSession trim fields in local state
+    setSelectedSession((prev) =>
+      prev
+        ? { ...prev, trim_start_ms: result.trim_start_ms, trim_end_ms: result.trim_end_ms }
+        : prev,
+    )
+    // Silently refresh sessions list so trim indicators stay up-to-date
+    listSessions(token)
+      .then((data) => setSessions(data))
+      .catch(() => {/* ignore background refresh errors */})
   }
 
   async function handleMarkBaseline(id: number) {
@@ -276,6 +313,18 @@ export default function App() {
         onViewSession={handleLoadSessionDetails}
         onMarkBaseline={handleMarkBaseline}
       />
+
+      {selectedSessionId !== undefined && (
+        <TrimPanel
+          token={token}
+          sessionId={selectedSessionId}
+          rawDurationMs={rawDurationMs}
+          initialTrimStart={selectedSession?.trim_start_ms ?? 0}
+          initialTrimEnd={selectedSession?.trim_end_ms ?? null}
+          onTrimApplied={handleTrimApplied}
+          onError={(msg) => setStatus(msg, false)}
+        />
+      )}
 
       {selectedSessionId !== undefined && (
         <SessionDetail sessionId={selectedSessionId} features={features} anomalies={anomalies} />
