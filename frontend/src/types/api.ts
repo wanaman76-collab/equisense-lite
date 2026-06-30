@@ -110,3 +110,39 @@ export interface ComputeResponse {
   anomalies_medium_high: number
   report: ComputeReport
 }
+
+// ── Live feed ─────────────────────────────────────────────────────────────────
+
+/** A single sensor reading arriving over the live feed. */
+export interface LiveSample {
+  ts_ms: number
+  ax: number
+  ay: number
+  az: number
+  gx: number
+  gy: number
+  gz: number
+}
+
+/** A live samples message pushed by the backend WebSocket. */
+export interface LiveSamplesMessage {
+  type: 'samples'
+  session_id: number
+  readings: LiveSample[]
+}
+
+/** A server heartbeat ping pushed periodically. */
+export interface LivePingMessage {
+  type: 'ping'
+}
+
+/** Initial connection confirmation. */
+export interface LiveConnectedMessage {
+  type: 'connected'
+  session_id: number
+}
+
+export type LiveMessage = LiveSamplesMessage | LivePingMessage | LiveConnectedMessage
+
+/** Connection state for the live feed panel. */
+export type LiveConnectionState = 'connecting' | 'live' | 'stalled' | 'disconnected'

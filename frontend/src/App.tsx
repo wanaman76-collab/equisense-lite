@@ -15,6 +15,7 @@ import {
 import { ApiError } from './api/client'
 import { ComputeReportSection } from './components/ComputeReportSection'
 import { HorseSection } from './components/HorseSection'
+import { LiveFeedPanel } from './components/LiveFeedPanel'
 import { SessionControls } from './components/SessionControls'
 import { SessionDetail } from './components/SessionDetail'
 import { SessionsTable } from './components/SessionsTable'
@@ -252,6 +253,10 @@ export default function App() {
         onRunDemo={handleRunDemo}
         onRecomputeBaseline={handleRecomputeBaseline}
       />
+
+      {sessionId !== undefined && (
+        <LiveFeedPanel sessionId={sessionId} token={token} />
+      )}
 
       {computeResult && (
         <ComputeReportSection

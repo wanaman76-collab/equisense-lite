@@ -19,13 +19,22 @@ class RecordingStore: ObservableObject {
     @Published var autoProcessingMessage: String = ""
     @Published var autoProcessingError: String? = nil
 
+    // MARK: - Live publisher
+
+    private var livePublisher: LivePublisher?
+    private let networkMonitor: NetworkMonitor
+
+    init(networkMonitor: NetworkMonitor = NetworkMonitor()) {
+        self.networkMonitor = networkMonitor
+    }
+
     private var fileURL: URL? {
         guard let sid = sessionId else { return nil }
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         return docs?.appendingPathComponent("recording_\(sid).jsonl")
     }
 
-    func startRecording(sessionId: Int, horseId: Int, horseName: String) {
+    func startRecording(sessionId: Int, horseId: Int, horseName: String, client: APIClient? = nil) {
         self.sessionId = sessionId
         self.sessionHorseId = horseId
         self.sessionHorseName = horseName
@@ -39,14 +48,24 @@ class RecordingStore: ObservableObject {
         self.isAutoProcessing = false
         self.autoProcessingMessage = ""
         self.autoProcessingError = nil
+
+        // Start live publisher if a client is available
+        if let client {
+            let publisher = LivePublisher(networkMonitor: networkMonitor)
+            publisher.start(sessionId: sessionId, client: client)
+            livePublisher = publisher
+        }
     }
 
     func addSample(_ sample: SensorSample) {
         samples.append(sample)
+        livePublisher?.enqueue(sample)
     }
 
     func stopRecording() {
         isRecording = false
+        livePublisher?.stop()
+        livePublisher = nil
         saveToFile()
     }
 
@@ -65,6 +84,8 @@ class RecordingStore: ObservableObject {
     }
 
     func clearData() {
+        livePublisher?.stop()
+        livePublisher = nil
         if let url = fileURL {
             try? FileManager.default.removeItem(at: url)
         }

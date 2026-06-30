@@ -178,6 +178,58 @@ No additional entitlements or provisioning profiles are needed for personal/deve
 - Timestamps: epoch-ms anchored at session start, offset by CoreMotion uptime for monotonic ordering.
 - Offline-first: data is stored locally during recording and uploaded after stop.
 - The app handles **409 Duplicate** responses from the backend gracefully (treated as success).
+- **Live feed**: while recording is active, the app streams small sample batches every ~200 ms to the backend via `POST /sessions/{id}/live-ingest`. This feed is visible in real time on the Mac dashboard (see *Live Feed* section below).
+
+---
+
+## Live Feed — iPhone → Backend → Mac Dashboard
+
+Phase 6 adds real-time streaming from the iOS recorder to the Mac web dashboard.
+
+### How it works
+
+```
+iPhone (recording)
+  └─→ POST /sessions/{id}/live-ingest  (every ~200 ms)
+        └─→ FastAPI live hub
+              └─→ WS broadcast → Mac browser
+                    └─→ LiveFeedPanel (rolling chart)
+```
+
+### Quick start (local LAN)
+
+1. **Start the backend** on your Mac:
+   ```bash
+   make dev-backend        # starts uvicorn on 0.0.0.0:8000
+   ```
+
+2. **Find your Mac's LAN IP** (not `localhost`!):
+   ```bash
+   ipconfig getifaddr en0   # Wi-Fi
+   # example: 192.168.1.42
+   ```
+
+3. **Configure the iOS app** → Settings tab:
+   - **API Base URL**: `http://192.168.1.42:8000`  *(use your Mac's actual LAN IP)*
+   - **API Token**: `dev-token` (or your configured `API_TOKEN`)
+
+4. **Open the Mac dashboard** at `http://localhost:5173` (or wherever `make dev-frontend` is running). Make sure the same token is entered in the Token field.
+
+5. **Create a session** on iOS (Horse & Session tab) — note the session ID.
+
+6. **Start recording** on iOS. The *Live Feed* panel on the Mac dashboard will appear automatically for the active session and show rolling accel/gyro charts within ~1 second.
+
+7. **Stop recording** on iOS to end the live feed. The final upload and compute run automatically.
+
+### Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| Live feed panel shows "Disconnected — retrying…" | Check that the Mac IP is reachable from the phone (same Wi-Fi) |
+| iOS app can't reach backend | Use LAN IP (e.g. `192.168.x.x`), not `localhost` — `localhost` from the phone resolves to the phone itself |
+| Firewall blocking connection | Allow incoming on port 8000 in macOS System Settings → Network → Firewall options |
+| wss:// vs ws:// | For local LAN dev use `http://` base URL — the live WS uses `ws://`. For production (Render) the frontend will upgrade to `wss://` automatically via the `VITE_API_URL` env var |
+| Panel doesn't appear | A session must be active (started via "Start" button or iOS). The panel is only shown while `sessionId` is set |
 
 ---
 
