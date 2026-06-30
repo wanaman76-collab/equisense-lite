@@ -57,6 +57,7 @@ def test_anomalies_invalid_session_returns_200_empty_list():
 
 def test_duplicate_horse_returns_409():
     import uuid
+
     unique_name = f"TestHorse_{uuid.uuid4().hex[:8]}"
     r1 = client.post("/horses", json={"name": unique_name}, headers=headers)
     assert r1.status_code == 201, r1.text

@@ -3,7 +3,7 @@ import os
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.db import Base, engine, SessionLocal
+from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import Horse
 
@@ -29,8 +29,7 @@ def test_session_lifecycle():
     sid = r.json()["id"]
 
     readings = [
-        {"ts_ms": i * 50, "ax": 0.1, "ay": 0.0, "az": 0.2, "gx": 0.01, "gy": 0.02, "gz": 0.03}
-        for i in range(400)
+        {"ts_ms": i * 50, "ax": 0.1, "ay": 0.0, "az": 0.2, "gx": 0.01, "gy": 0.02, "gz": 0.03} for i in range(400)
     ]
     r = client.post("/ingest", json={"session_id": sid, "readings": readings}, headers=headers)
     assert r.status_code == 200, r.text

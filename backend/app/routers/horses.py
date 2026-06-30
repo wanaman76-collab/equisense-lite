@@ -1,19 +1,22 @@
 from __future__ import annotations
+
+from datetime import datetime
+
+import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from datetime import datetime
-import numpy as np
+from sqlalchemy.orm import Session
 
-from ..db import get_db, Base, engine
-from ..models import Horse, Session as SessionModel, FeatureWindow, Baseline
+from ..db import get_db
+from ..models import Baseline, FeatureWindow, Horse
+from ..models import Session as SessionModel
 from ..schemas import HorseCreate, HorseOut, HorseUpdate
 
 router = APIRouter(prefix="/horses", tags=["horses"])
-Base.metadata.create_all(bind=engine)
 
 BASELINE_FEATURES = ["cadence_spm", "stride_var", "asymmetry_proxy"]
+
 
 def _median_mad(values: list[float]) -> tuple[float, float]:
     arr = np.array(values, dtype=float)
@@ -22,6 +25,7 @@ def _median_mad(values: list[float]) -> tuple[float, float]:
     # Prevent zero MAD
     mad = mad if mad > 1e-6 else 1e-6
     return med, mad
+
 
 @router.post("", response_model=HorseOut, status_code=201)
 def create_horse(payload: HorseCreate, db: Session = Depends(get_db)):
@@ -35,10 +39,12 @@ def create_horse(payload: HorseCreate, db: Session = Depends(get_db)):
     db.refresh(h)
     return h
 
+
 @router.get("", response_model=list[HorseOut])
 def list_horses(db: Session = Depends(get_db)):
     q = db.execute(select(Horse).order_by(Horse.name.asc()))
     return [r[0] for r in q.all()]
+
 
 @router.get("/{horse_id}", response_model=HorseOut)
 def get_horse(horse_id: int, db: Session = Depends(get_db)):
@@ -46,6 +52,7 @@ def get_horse(horse_id: int, db: Session = Depends(get_db)):
     if not h:
         raise HTTPException(status_code=404, detail="Horse not found")
     return h
+
 
 @router.patch("/{horse_id}", response_model=HorseOut)
 def update_horse(horse_id: int, payload: HorseUpdate, db: Session = Depends(get_db)):
@@ -64,6 +71,7 @@ def update_horse(horse_id: int, payload: HorseUpdate, db: Session = Depends(get_
     db.refresh(h)
     return h
 
+
 @router.delete("/{horse_id}", status_code=204)
 def delete_horse(horse_id: int, db: Session = Depends(get_db)):
     h = db.get(Horse, horse_id)
@@ -73,6 +81,7 @@ def delete_horse(horse_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Cannot delete horse with existing sessions")
     db.delete(h)
     db.commit()
+
 
 @router.post("/{horse_id}/baseline/recompute")
 def recompute_baseline(horse_id: int, db: Session = Depends(get_db)):
@@ -85,9 +94,15 @@ def recompute_baseline(horse_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Horse not found")
 
     # find baseline sessions for horse
-    sess_ids = db.execute(
-        select(SessionModel.id).where(SessionModel.horse_id == horse_id, SessionModel.is_baseline == True)  # noqa: E712
-    ).scalars().all()
+    sess_ids = (
+        db.execute(
+            select(SessionModel.id).where(
+                SessionModel.horse_id == horse_id, SessionModel.is_baseline == True  # noqa: E712
+            )
+        )
+        .scalars()
+        .all()
+    )
 
     if not sess_ids:
         raise HTTPException(status_code=409, detail="No baseline sessions. Mark at least 1 session as baseline first.")
@@ -95,11 +110,9 @@ def recompute_baseline(horse_id: int, db: Session = Depends(get_db)):
     # gather values per feature across windows
     values_by_feature: dict[str, list[float]] = {f: [] for f in BASELINE_FEATURES}
     rows = db.execute(
-        select(
-            FeatureWindow.cadence_spm,
-            FeatureWindow.stride_var,
-            FeatureWindow.asymmetry_proxy
-        ).where(FeatureWindow.session_id.in_(sess_ids))
+        select(FeatureWindow.cadence_spm, FeatureWindow.stride_var, FeatureWindow.asymmetry_proxy).where(
+            FeatureWindow.session_id.in_(sess_ids)
+        )
     ).all()
 
     for cadence_spm, stride_var, asymmetry_proxy in rows:

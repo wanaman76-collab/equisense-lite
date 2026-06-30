@@ -1,12 +1,14 @@
 """Tests for new MVP features: ingestion dedupe, export endpoints, horse CRUD, compute idempotency."""
+
 from __future__ import annotations
+
 import os
 import uuid
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session as DBSession
 
-from app.db import Base, engine, SessionLocal
+from app.db import Base, SessionLocal, engine
 from app.main import app
 from app.models import Horse
 
@@ -27,8 +29,7 @@ def setup_module(_):
 
 def _make_readings(count: int, start_ts: int = 0):
     return [
-        {"ts_ms": start_ts + i * 50, "ax": 0.1, "ay": 0.0, "az": 0.2,
-         "gx": 0.01, "gy": 0.02, "gz": 0.03}
+        {"ts_ms": start_ts + i * 50, "ax": 0.1, "ay": 0.0, "az": 0.2, "gx": 0.01, "gy": 0.02, "gz": 0.03}
         for i in range(count)
     ]
 
@@ -40,6 +41,7 @@ def _create_session(horse_id: int = 1) -> int:
 
 
 # ---------- Task 1: Ingestion dedupe ----------
+
 
 def test_ingest_duplicate_batch_does_not_double_count():
     """Ingesting the same batch twice should not double the stored readings."""
@@ -62,7 +64,7 @@ def test_ingest_duplicate_batch_does_not_double_count():
 def test_ingest_partial_overlap_only_stores_new():
     """Ingesting a batch where some readings already exist stores only novel ones."""
     sid = _create_session()
-    readings_first = _make_readings(5, start_ts=0)     # ts_ms: 0, 50, 100, 150, 200
+    readings_first = _make_readings(5, start_ts=0)  # ts_ms: 0, 50, 100, 150, 200
     readings_second = _make_readings(5, start_ts=250)  # ts_ms: 250, 300, 350, 400, 450
     overlap = readings_first + readings_second  # first 5 are duplicates
 
@@ -76,6 +78,7 @@ def test_ingest_partial_overlap_only_stores_new():
 
 
 # ---------- Task 2: Export endpoints ----------
+
 
 def _setup_session_with_compute():
     sid = _create_session()
@@ -141,6 +144,7 @@ def test_export_csv_empty_session():
 
 
 # ---------- Task 3: Horse CRUD ----------
+
 
 def test_get_horse_returns_horse():
     r = client.get("/horses/1", headers=headers)
@@ -212,6 +216,7 @@ def test_delete_horse_not_found():
 
 
 # ---------- Task 4: Compute idempotency ----------
+
 
 def test_compute_twice_no_duplicate_windows():
     """Running compute twice on the same session yields the same window count."""

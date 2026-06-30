@@ -1,27 +1,35 @@
 from __future__ import annotations
+
 from datetime import datetime
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel
-from typing import List, Optional, Literal
+
 
 class HorseCreate(BaseModel):
     name: str
     notes: Optional[str] = None
 
+
 class HorseUpdate(BaseModel):
     name: Optional[str] = None
     notes: Optional[str] = None
+
 
 class HorseOut(BaseModel):
     id: int
     name: str
     notes: Optional[str]
+
     class Config:
         from_attributes = True
+
 
 class SessionCreate(BaseModel):
     horse_id: int
     surface: Optional[str] = None
     notes: Optional[str] = None
+
 
 class SessionOut(BaseModel):
     id: int
@@ -32,8 +40,10 @@ class SessionOut(BaseModel):
     stopped_at: Optional[datetime]
     status: str
     is_baseline: bool | None = None
+
     class Config:
         from_attributes = True
+
 
 class IngestItem(BaseModel):
     ts_ms: int
@@ -44,9 +54,11 @@ class IngestItem(BaseModel):
     gy: float
     gz: float
 
+
 class IngestBatch(BaseModel):
     session_id: int
     readings: List[IngestItem]
+
 
 class FeatureWindowOut(BaseModel):
     id: int
@@ -57,8 +69,10 @@ class FeatureWindowOut(BaseModel):
     asymmetry_proxy: float | None
     energy: float | None
     quality_flags: str | None
+
     class Config:
         from_attributes = True
+
 
 class AnomalyOut(BaseModel):
     id: int
@@ -68,15 +82,19 @@ class AnomalyOut(BaseModel):
     severity: str
     details_json: dict | None
     created_at: datetime
+
     class Config:
         from_attributes = True
+
 
 class AnomalyOutEmbed(BaseModel):
     score: float
     severity: str
     method: str
+
     class Config:
         from_attributes = True
+
 
 class FeatureWindowExport(BaseModel):
     id: int
@@ -88,13 +106,16 @@ class FeatureWindowExport(BaseModel):
     energy: float | None
     quality_flags: str | None
     anomaly: AnomalyOutEmbed | None
+
     class Config:
         from_attributes = True
+
 
 # ---------- Compute report schemas ----------
 
 TrotConfidence = Literal["LOW", "MEDIUM", "HIGH"]
 OverallLabel = Literal["NORMAL", "WATCH", "IRREGULAR"]
+
 
 class ComputeReportMetricsOut(BaseModel):
     cadence_spm_mean: float | None
@@ -106,6 +127,7 @@ class ComputeReportMetricsOut(BaseModel):
     energy_mean: float | None
     windows_with_gaps: int
 
+
 class ComputeReportBaselineOut(BaseModel):
     cadence_spm_median: float | None
     cadence_spm_mad: float | None
@@ -114,6 +136,7 @@ class ComputeReportBaselineOut(BaseModel):
     asymmetry_proxy_median: float | None
     asymmetry_proxy_mad: float | None
 
+
 class ComputeReportOut(BaseModel):
     overall_label: OverallLabel
     trot_confidence: TrotConfidence
@@ -121,13 +144,16 @@ class ComputeReportOut(BaseModel):
     metrics: ComputeReportMetricsOut
     baseline: ComputeReportBaselineOut
 
+
 class ComputeResponseOut(BaseModel):
     windows: int
     anomalies_total: int
     anomalies_medium_high: int
     report: ComputeReportOut
 
+
 # ---------- Baseline toggle ----------
+
 
 class BaselineToggleIn(BaseModel):
     enabled: bool

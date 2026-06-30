@@ -3,8 +3,25 @@
 EquiSense Lite is a lightweight prototype for recording equine IMU sessions and producing basic anomaly analytics.
 
 ## Stack
-- Backend: FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL in production)
-- Frontend: React (Vite)
+- Backend: FastAPI + SQLAlchemy (SQLite in dev, PostgreSQL in production) · Python 3.12
+- Frontend: React (Vite) · TypeScript
+
+---
+
+## Developer Quick-Start (Makefile)
+
+> Requires `make` (pre-installed on macOS/Linux; Windows: use WSL or Git Bash).
+
+```bash
+make backend-install   # install Python deps
+make backend-check     # lint (ruff) + format-check (black) + tests
+make frontend-install  # npm ci
+make frontend-test     # vitest
+make dev-backend       # uvicorn --reload
+make dev-frontend      # vite dev server
+```
+
+Run `make help` to see all available targets.
 
 ---
 
@@ -42,7 +59,7 @@ If the dashboard is empty, refresh the sessions list after creating a session vi
 ## Local Development
 
 ### Prerequisites
-- Python 3.10+
+- Python 3.12+
 - Node.js 18+
 
 ### Backend
@@ -53,6 +70,7 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -62,6 +80,7 @@ cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
+alembic upgrade head
 uvicorn app.main:app --reload
 ```
 
@@ -69,6 +88,9 @@ The API will be available at `http://localhost:8000`.
 Swagger docs: `http://localhost:8000/docs`
 
 The default API token for local dev is `dev-token` (set via `API_TOKEN` env var, defaults to `dev-token`).
+
+> **Migrations:** Schema is managed by Alembic. Run `alembic upgrade head` before starting the server.
+> See [docs/migrations.md](docs/migrations.md) for details.
 
 ### Frontend
 

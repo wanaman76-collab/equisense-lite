@@ -1,36 +1,21 @@
 from __future__ import annotations
 
+import hmac
 import os
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
-from starlette.responses import JSONResponse
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
-from .db import Base, engine
 from .routers import horses, ingest, sessions
 
 app = FastAPI(title="EquiSense Lite API")
 
-# Create tables (fresh DB)
-Base.metadata.create_all(bind=engine)
-
-# Minimal migration:
-# Ensure sessions.is_baseline exists for older DBs.
-# Works on Postgres (IF NOT EXISTS) and won't break if already present.
-try:
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "ALTER TABLE sessions "
-                "ADD COLUMN IF NOT EXISTS is_baseline BOOLEAN NOT NULL DEFAULT FALSE"
-            )
-        )
-except SQLAlchemyError:
-    # If anything unexpected happens, don't crash the server startup.
-    # (But endpoints may still error; check logs.)
-    pass
+# Schema lifecycle is managed by Alembic migrations.
+# Run `alembic upgrade head` before starting the server (or in CI/deploy pipelines).
+# For local dev: `make migrate-upgrade`
+# Do NOT add Base.metadata.create_all() or manual ALTER TABLE statements here.
 
 # CORS: allow Netlify production + deploy previews + local dev
 app.add_middleware(
@@ -47,8 +32,18 @@ app.add_middleware(
 )
 
 
+# ---------------------------------------------------------------------------
+# Token authentication middleware
+# ---------------------------------------------------------------------------
+
+
+def _tokens_match(provided: str, expected: str) -> bool:
+    """Constant-time string comparison to prevent timing-based token leakage."""
+    return hmac.compare_digest(provided.encode(), expected.encode())
+
+
 @app.middleware("http")
-async def token_guard(request, call_next):
+async def token_guard(request: Request, call_next) -> Response:
     # Allow CORS preflight requests (they don't include auth headers)
     if request.method == "OPTIONS":
         return await call_next(request)
@@ -64,10 +59,25 @@ async def token_guard(request, call_next):
         return JSONResponse({"detail": "Missing X-API-Token"}, status_code=401)
 
     expected = os.getenv("API_TOKEN", "dev-token")
-    if token != expected:
+    if not _tokens_match(token, expected):
         return JSONResponse({"detail": "Invalid X-API-Token"}, status_code=401)
 
     return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Security headers middleware — registered last so it wraps all other
+# middleware, including token_guard, and applies to *every* response.
+# ---------------------------------------------------------------------------
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next) -> Response:
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 
 @app.get("/health")
