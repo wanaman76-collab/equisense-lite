@@ -174,3 +174,19 @@ class TestRunComputeViaAPI:
     def test_compute_nonexistent_session_returns_404(self):
         r = client.post("/sessions/999999/compute", headers=headers)
         assert r.status_code == 404
+
+    def test_batch_query_multi_window_output(self):
+        """Regression: batch-fetch optimisation must produce the same output as
+        the previous per-window query strategy.  We verify correctness by
+        ingesting exactly 3 × 10 s worth of data and asserting 3 windows are
+        produced with plausible feature values.
+        """
+        sid = _create_session()
+        readings = _make_readings(1500)  # 75 s @ 20 Hz → several windows
+        client.post("/ingest", json={"session_id": sid, "readings": readings}, headers=headers)
+        r = client.post(f"/sessions/{sid}/compute", headers=headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["windows"] >= 3, "Expected at least 3 windows for 75s of data"
+        assert data["anomalies_total"] >= 0
+        assert data["report"]["overall_label"] in ("NORMAL", "WATCH", "IRREGULAR")

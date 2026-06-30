@@ -142,10 +142,14 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
     Idempotent: re-running on the same session updates existing records
     rather than creating duplicates.
 
+    Performance: all sensor readings for the session are fetched in a
+    *single* query and then sliced per-window in memory, avoiding the
+    previous N+1 database query pattern (one query per window).
+
     Returns a :class:`ComputeResponseOut` containing per-window counts and
     the aggregated report.
     """
-    # Determine time range from stored readings
+    # ── 1. Determine time range ───────────────────────────────────────────
     q = db.execute(
         select(func.min(SensorReading.ts_ms), func.max(SensorReading.ts_ms)).where(
             SensorReading.session_id == session_id
@@ -162,6 +166,23 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
 
     baseline = _get_baseline(db, horse_id)
 
+    # ── 2. Batch-fetch ALL readings for the session in one query ──────────
+    all_rows = db.execute(
+        select(
+            SensorReading.ts_ms,
+            SensorReading.ax,
+            SensorReading.ay,
+            SensorReading.az,
+            SensorReading.gx,
+            SensorReading.gy,
+            SensorReading.gz,
+        )
+        .where(SensorReading.session_id == session_id)
+        .order_by(SensorReading.ts_ms.asc())
+    ).all()
+
+    all_arr = np.array(all_rows, dtype=float) if all_rows else np.empty((0, 7))
+
     # Per-window accumulators
     cadence_vals: list[float] = []
     stride_var_vals: list[float] = []
@@ -176,22 +197,13 @@ def run_compute(session_id: int, horse_id: int, db: DBSession) -> ComputeRespons
     created_windows = 0
 
     for s, e in ranges:
-        rows = db.execute(
-            select(
-                SensorReading.ts_ms,
-                SensorReading.ax,
-                SensorReading.ay,
-                SensorReading.az,
-                SensorReading.gx,
-                SensorReading.gy,
-                SensorReading.gz,
-            )
-            .where(SensorReading.session_id == session_id)
-            .where(SensorReading.ts_ms >= s, SensorReading.ts_ms < e)
-            .order_by(SensorReading.ts_ms.asc())
-        ).all()
+        # ── 3. Slice the pre-fetched array for this window ────────────────
+        if all_arr.size:
+            mask = (all_arr[:, 0] >= s) & (all_arr[:, 0] < e)
+            arr = all_arr[mask]
+        else:
+            arr = np.empty((0, 7))
 
-        arr = np.array(rows, dtype=float) if rows else np.empty((0, 7))
         feat = compute_features(arr)
 
         # Upsert FeatureWindow
