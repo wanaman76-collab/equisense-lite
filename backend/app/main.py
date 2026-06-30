@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from .routers import horses, ingest, sessions
+from .routers.live import router as live_router
 
 app = FastAPI(title="EquiSense Lite API")
 
@@ -88,3 +89,4 @@ def health():
 app.include_router(horses.router)
 app.include_router(sessions.router)
 app.include_router(ingest.router)
+app.include_router(live_router)

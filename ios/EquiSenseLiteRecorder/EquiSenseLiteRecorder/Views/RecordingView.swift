@@ -405,7 +405,7 @@ struct RecordingView: View {
         // Keep screen awake while recording
         UIApplication.shared.isIdleTimerDisabled = true
 
-        recordingStore.startRecording(sessionId: sessionId, horseId: horseId, horseName: horseName)
+        recordingStore.startRecording(sessionId: sessionId, horseId: horseId, horseName: horseName, client: apiClient)
 
         // Start with calibrating visible immediately
         isCalibrating = true

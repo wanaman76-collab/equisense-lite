@@ -144,6 +144,21 @@ class APIClient {
         return totalStored
     }
 
+    // MARK: - Live ingest (real-time feed; does not persist)
+
+    /// Sends a small batch of live samples to the backend for broadcast to
+    /// WebSocket subscribers.  This endpoint does **not** persist data.
+    func sendLiveBatch(sessionId: Int, samples: [SensorSample]) async throws {
+        let batch = IngestBatch(session_id: sessionId, readings: samples)
+        let req = try request("/sessions/\(sessionId)/live-ingest", method: "POST", body: batch)
+        // We only need a successful HTTP response; discard the body.
+        let (_, response) = try await session.data(for: req)
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidURL }
+        guard (200...299).contains(http.statusCode) else {
+            throw APIError.httpError(http.statusCode, "live-ingest failed")
+        }
+    }
+
     // MARK: - Compute
 
     func compute(sessionId: Int) async throws -> ComputeResponse {

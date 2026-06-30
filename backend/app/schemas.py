@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class HorseCreate(BaseModel):
@@ -157,3 +157,29 @@ class ComputeResponseOut(BaseModel):
 
 class BaselineToggleIn(BaseModel):
     enabled: bool
+
+
+# ---------- Live-feed schemas ----------
+
+
+class LiveIngestBatch(BaseModel):
+    """Small batch of sensor readings sent in real-time from the recording device.
+
+    The data is broadcast to WebSocket subscribers but **not** persisted.
+    Use the regular ``/ingest`` endpoint for final upload and persistence.
+    Maximum 100 readings per request to prevent broadcast overload.
+    """
+
+    readings: List[IngestItem]
+
+    @field_validator("readings")
+    @classmethod
+    def limit_batch_size(cls, v: List[IngestItem]) -> List[IngestItem]:
+        if len(v) > 100:
+            raise ValueError("Live batch may not exceed 100 readings")
+        return v
+
+
+class LiveIngestResponse(BaseModel):
+    broadcasted: int
+    subscribers: int
