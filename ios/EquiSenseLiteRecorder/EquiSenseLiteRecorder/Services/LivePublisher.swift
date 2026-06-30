@@ -16,10 +16,16 @@ class LivePublisher {
     // MARK: - Configuration
 
     /// How often (in seconds) buffered samples are flushed to the backend.
+    /// Configurable at build time; keep ≤ 1 s for a responsive live chart.
     static let publishInterval: TimeInterval = 0.2 // 200 ms
 
     /// Maximum readings sent per live-ingest request (backend limit is 100).
+    /// Keeping this at 50 leaves headroom and matches ~1 s of 50 Hz data.
     static let maxBatchSize: Int = 50
+
+    /// Maximum pending-sample buffer size while the network is unavailable.
+    /// Oldest samples are discarded when this limit is reached.
+    static let maxOfflineBuffer: Int = 200
 
     // MARK: - State
 
@@ -28,6 +34,11 @@ class LivePublisher {
     private var sessionId: Int?
     private var apiClient: APIClient?
     private let networkMonitor: NetworkMonitor
+
+    /// Cumulative count of samples flushed successfully (debug builds only).
+    private var totalFlushed: Int = 0
+    /// Cumulative count of flush failures (debug builds only).
+    private var totalErrors: Int = 0
 
     // MARK: - Init
 
@@ -42,6 +53,12 @@ class LivePublisher {
         self.sessionId = sessionId
         self.apiClient = client
         self.pending = []
+        self.totalFlushed = 0
+        self.totalErrors = 0
+
+        #if DEBUG
+        print("[LivePublisher] started session=\(sessionId) interval=\(Self.publishInterval)s maxBatch=\(Self.maxBatchSize)")
+        #endif
 
         timer = Timer.scheduledTimer(
             withTimeInterval: Self.publishInterval,
@@ -58,6 +75,11 @@ class LivePublisher {
     func stop() {
         timer?.invalidate()
         timer = nil
+
+        #if DEBUG
+        print("[LivePublisher] stopped session=\(sessionId ?? -1) totalFlushed=\(totalFlushed) totalErrors=\(totalErrors) pendingDiscarded=\(pending.count)")
+        #endif
+
         pending = []
         sessionId = nil
         apiClient = nil
@@ -83,8 +105,11 @@ class LivePublisher {
             // Graceful degradation: keep the most recent samples so the live
             // feed recovers quickly when network returns, but cap growth to
             // avoid unbounded memory use during extended offline periods.
-            if pending.count > 200 {
-                pending = Array(pending.suffix(200))
+            if pending.count > Self.maxOfflineBuffer {
+                pending = Array(pending.suffix(Self.maxOfflineBuffer))
+                #if DEBUG
+                print("[LivePublisher] offline — buffer trimmed to \(Self.maxOfflineBuffer) samples")
+                #endif
             }
             return
         }
@@ -94,8 +119,18 @@ class LivePublisher {
 
         do {
             try await client.sendLiveBatch(sessionId: sid, samples: batch)
+            totalFlushed += batch.count
+            #if DEBUG
+            if totalFlushed % 500 == 0 {
+                print("[LivePublisher] health session=\(sid) flushed=\(totalFlushed) errors=\(totalErrors) pending=\(pending.count)")
+            }
+            #endif
         } catch {
+            totalErrors += 1
             // Silently discard: live feed failure must never interrupt recording.
+            #if DEBUG
+            print("[LivePublisher] flush error (ignored) session=\(sid) error=\(error.localizedDescription) totalErrors=\(totalErrors)")
+            #endif
         }
     }
 }

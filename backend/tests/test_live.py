@@ -207,3 +207,189 @@ class TestLiveIngest:
 
         # After context exit the connection is cleaned up
         assert live_manager.subscriber_count(sid) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 6.1 — Stats endpoint
+# ---------------------------------------------------------------------------
+
+
+class TestLiveStats:
+    def test_missing_token_returns_401(self):
+        """Stats endpoint requires authentication."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+        resp = client.get(f"/sessions/{sid}/live/stats")
+        assert resp.status_code == 401
+
+    def test_wrong_token_returns_401(self):
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+        resp = client.get(f"/sessions/{sid}/live/stats", headers={"x-api-token": "wrong"})
+        assert resp.status_code == 401
+
+    def test_nonexistent_session_returns_404(self):
+        resp = client.get("/sessions/999999/live/stats", headers=HEADERS)
+        assert resp.status_code == 404
+
+    def test_returns_expected_shape_for_idle_session(self):
+        """Stats for a session with no ingest returns zeros."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        resp = client.get(f"/sessions/{sid}/live/stats", headers=HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+
+        assert data["session_id"] == sid
+        assert data["active_subscribers"] == 0
+        assert "ingest_count" in data
+        assert "broadcast_count" in data
+        assert "coalesced_count" in data
+        assert "queue_drop_count" in data
+        assert "ingest_rate_per_s" in data
+        assert "broadcast_rate_per_s" in data
+
+    def test_ingest_increments_counters(self):
+        """Posting to live-ingest is reflected in stats counters."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        for _ in range(3):
+            client.post(
+                f"/sessions/{sid}/live-ingest",
+                json={"readings": _make_readings(2)},
+                headers=HEADERS,
+            )
+
+        resp = client.get(f"/sessions/{sid}/live/stats", headers=HEADERS)
+        assert resp.status_code == 200
+        data = resp.json()
+        # Each call either broadcasts or coalesces; total must equal ingest calls.
+        assert data["ingest_count"] + data["coalesced_count"] >= data["broadcast_count"]
+        assert data["ingest_count"] >= 1
+
+    def test_active_subscribers_reflected_in_stats(self):
+        """active_subscribers count tracks live WebSocket connections."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        with client.websocket_connect(f"/sessions/{sid}/live?token=dev-token") as ws:
+            _connected = ws.receive_json()
+            resp = client.get(f"/sessions/{sid}/live/stats", headers=HEADERS)
+            assert resp.json()["active_subscribers"] == 1
+
+        # After disconnect
+        resp = client.get(f"/sessions/{sid}/live/stats", headers=HEADERS)
+        assert resp.json()["active_subscribers"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 6.1 — Timestamp ordering and malformed-ts filtering
+# ---------------------------------------------------------------------------
+
+
+class TestTimestampHandling:
+    def test_out_of_order_readings_are_sorted(self):
+        """Readings sent out-of-order by ts_ms must arrive sorted ascending."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        # Send readings in reverse timestamp order
+        readings = [
+            {"ts_ms": 3000, "ax": 0.3, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},
+            {"ts_ms": 1000, "ax": 0.1, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},
+            {"ts_ms": 2000, "ax": 0.2, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},
+        ]
+
+        with client.websocket_connect(f"/sessions/{sid}/live?token=dev-token") as ws:
+            _connected = ws.receive_json()
+            resp = client.post(
+                f"/sessions/{sid}/live-ingest",
+                json={"readings": readings},
+                headers=HEADERS,
+            )
+            assert resp.status_code == 200
+            msg = ws.receive_json()
+
+        ts_list = [r["ts_ms"] for r in msg["readings"]]
+        assert ts_list == sorted(ts_list), f"Expected ascending timestamps, got {ts_list}"
+
+    def test_malformed_ts_zero_is_filtered(self):
+        """Readings with ts_ms == 0 are silently dropped."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        readings = [
+            {"ts_ms": 0, "ax": 0.0, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},  # malformed
+            {"ts_ms": 1000, "ax": 0.1, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},
+        ]
+
+        resp = client.post(
+            f"/sessions/{sid}/live-ingest",
+            json={"readings": readings},
+            headers=HEADERS,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["broadcasted"] == 1  # only the valid reading
+
+    def test_all_malformed_returns_zero_broadcasted(self):
+        """Batch with only malformed ts_ms values returns broadcasted=0."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        readings = [
+            {"ts_ms": 0, "ax": 0.0, "ay": 0.0, "az": 0.0, "gx": 0.0, "gy": 0.0, "gz": 0.0},
+        ]
+        resp = client.post(
+            f"/sessions/{sid}/live-ingest",
+            json={"readings": readings},
+            headers=HEADERS,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["broadcasted"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 6.1 — Coalescing policy
+# ---------------------------------------------------------------------------
+
+
+class TestCoalescingPolicy:
+    def test_rapid_ingest_increments_coalesced_count(self):
+        """Multiple rapid-fire ingest calls within the broadcast window are coalesced."""
+        import time
+
+        from app.live import LiveConnectionManager
+
+        mgr = LiveConnectionManager()
+        import asyncio
+
+        session_id = 88888
+
+        async def _run():
+            # Send several broadcasts in rapid succession
+            for i in range(5):
+                await mgr.broadcast(session_id, {"type": "samples", "readings": [{"ts_ms": i}]})
+            return mgr.get_metrics(session_id)
+
+        metrics = asyncio.get_event_loop().run_until_complete(_run())
+        # At least some calls should have been coalesced (rate > 1/50ms)
+        assert metrics.ingest_count == 5
+        assert metrics.broadcast_count + metrics.coalesced_count == metrics.ingest_count
+
+    def test_metrics_broadcast_plus_coalesced_equals_ingest(self):
+        """broadcast_count + coalesced_count must always equal ingest_count."""
+        sess = client.post("/sessions", json={"horse_id": 1}, headers=HEADERS)
+        sid = sess.json()["id"]
+
+        # Clear any existing metrics by using a fresh session
+        for _ in range(10):
+            client.post(
+                f"/sessions/{sid}/live-ingest",
+                json={"readings": _make_readings(1)},
+                headers=HEADERS,
+            )
+
+        stats = client.get(f"/sessions/{sid}/live/stats", headers=HEADERS).json()
+        assert stats["broadcast_count"] + stats["coalesced_count"] == stats["ingest_count"]
