@@ -450,7 +450,7 @@ struct RecordingView: View {
 
         // Kick off auto upload + compute
         Task {
-            await recordingStore.uploadAndCompute(client: client)
+            await recordingStore.uploadOnly(client: client)
         }
     }
 
