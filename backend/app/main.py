@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db import engine
 from app.models import Base
-
+from app.routers import horses
 app = FastAPI()
 
 @app.on_event("startup")
