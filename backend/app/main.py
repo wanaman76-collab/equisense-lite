@@ -3,21 +3,22 @@ from __future__ import annotations
 import hmac
 import os
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+
 from app.db import engine
 from app.models import Base
-from app.routers import horses
+from app.routers import horses, ingest, sessions
+from app.routers.live import router as live_router
+
 app = FastAPI()
+
 
 @app.on_event("startup")
 def startup_create_tables() -> None:
     Base.metadata.create_all(bind=engine)
 
-# Schema lifecycle is managed by Alembic migrations.
-# Run `alembic upgrade head` before starting the server (or in CI/deploy pipelines).
-# For local dev: `make migrate-upgrade`
-# Do NOT add Base.metadata.create_all() or manual ALTER TABLE statements here.
 
 # CORS: allow Netlify production + deploy previews + local dev
 app.add_middleware(
@@ -68,8 +69,7 @@ async def token_guard(request: Request, call_next) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Security headers middleware — registered last so it wraps all other
-# middleware, including token_guard, and applies to *every* response.
+# Security headers middleware
 # ---------------------------------------------------------------------------
 
 
