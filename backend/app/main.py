@@ -53,7 +53,7 @@ async def token_guard(request: Request, call_next) -> Response:
         path.startswith("/docs")
         or path.startswith("/openapi.json")
         or path.startswith("/health")
-        or path.endswith("/live")        # allow WebSocket handshake route
+        or path.endswith("/live")  # allow WebSocket handshake route
         or path.endswith("/live/stats")  # allow live stats route (if present)
     ):
         return await call_next(request)
