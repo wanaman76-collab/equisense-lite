@@ -35,11 +35,6 @@ app.add_middleware(
 )
 
 
-# ---------------------------------------------------------------------------
-# Token authentication middleware
-# ---------------------------------------------------------------------------
-
-
 def _tokens_match(provided: str, expected: str) -> bool:
     """Constant-time string comparison to prevent timing-based token leakage."""
     return hmac.compare_digest(provided.encode(), expected.encode())
@@ -54,7 +49,13 @@ async def token_guard(request: Request, call_next) -> Response:
     path = request.url.path
 
     # Public endpoints (no token required)
-    if path.startswith("/docs") or path.startswith("/openapi.json") or path.startswith("/health"):
+    if (
+        path.startswith("/docs")
+        or path.startswith("/openapi.json")
+        or path.startswith("/health")
+        or path.endswith("/live")        # allow WebSocket handshake route
+        or path.endswith("/live/stats")  # allow live stats route (if present)
+    ):
         return await call_next(request)
 
     token = request.headers.get("x-api-token")
@@ -66,11 +67,6 @@ async def token_guard(request: Request, call_next) -> Response:
         return JSONResponse({"detail": "Invalid X-API-Token"}, status_code=401)
 
     return await call_next(request)
-
-
-# ---------------------------------------------------------------------------
-# Security headers middleware
-# ---------------------------------------------------------------------------
 
 
 @app.middleware("http")
