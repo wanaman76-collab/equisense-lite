@@ -103,7 +103,35 @@ class RecordingStore: ObservableObject {
         autoProcessingError = nil
     }
 
-    /// Upload then compute analysis (intended for auto-run after stopping recording).
+    /// Upload-only mode (compute intentionally skipped to avoid OOM/502).
+    func uploadOnly(client: APIClient) async {
+        guard let sid = sessionId else { return }
+        let samplesSnapshot = self.samples
+        guard !samplesSnapshot.isEmpty else {
+            autoProcessingError = "No samples to upload."
+            return
+        }
+
+        isAutoProcessing = true
+        autoProcessingError = nil
+        autoProcessingMessage = "Uploading…"
+        lastComputeResult = nil
+
+        do {
+            _ = try await client.uploadAll(sessionId: sid, samples: samplesSnapshot, batchSize: 200) { sent, total in
+                self.autoProcessingMessage = "Uploading \(sent) / \(total)…"
+            }
+            self.isUploaded = true
+            self.autoProcessingMessage = "Upload complete. Compute skipped."
+        } catch {
+            self.autoProcessingError = error.localizedDescription
+            self.autoProcessingMessage = "Upload failed."
+        }
+
+        isAutoProcessing = false
+    }
+
+    /// Keep old method if you want to re-enable later.
     func uploadAndCompute(client: APIClient) async {
         guard let sid = sessionId else { return }
         let samplesSnapshot = self.samples
