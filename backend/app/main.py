@@ -4,14 +4,15 @@ import hmac
 import os
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
 
-from .routers import horses, ingest, sessions
-from .routers.live import router as live_router
+from app.db import engine
+from app.models import Base
 
-app = FastAPI(title="EquiSense Lite API")
+app = FastAPI()
+
+@app.on_event("startup")
+def startup_create_tables() -> None:
+    Base.metadata.create_all(bind=engine)
 
 # Schema lifecycle is managed by Alembic migrations.
 # Run `alembic upgrade head` before starting the server (or in CI/deploy pipelines).
