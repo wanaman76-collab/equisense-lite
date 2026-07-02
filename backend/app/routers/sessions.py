@@ -7,7 +7,7 @@ import io
 from datetime import datetime
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -62,8 +62,17 @@ def stop_session(session_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[SessionOut])
-def list_sessions(db: Session = Depends(get_db)):
-    q = db.execute(select(SessionModel).order_by(SessionModel.started_at.desc()))
+def list_sessions(
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """List sessions ordered by most-recent first.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate through large
+    result sets and avoid loading the full table into memory at once.
+    """
+    q = db.execute(select(SessionModel).order_by(SessionModel.started_at.desc()).limit(limit).offset(offset))
     return [r[0] for r in q.all()]
 
 
@@ -73,20 +82,44 @@ def list_sessions(db: Session = Depends(get_db)):
 
 
 @router.get("/{session_id}/features", response_model=List[FeatureWindowOut])
-def get_features(session_id: int, db: Session = Depends(get_db)):
+def get_features(
+    session_id: int,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Return feature windows for a session ordered by time.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate.
+    """
     q = db.execute(
-        select(FeatureWindow).where(FeatureWindow.session_id == session_id).order_by(FeatureWindow.ts_start.asc())
+        select(FeatureWindow)
+        .where(FeatureWindow.session_id == session_id)
+        .order_by(FeatureWindow.ts_start.asc())
+        .limit(limit)
+        .offset(offset)
     )
     return [r[0] for r in q.all()]
 
 
 @router.get("/{session_id}/anomalies", response_model=List[AnomalyOut])
-def get_anomalies(session_id: int, db: Session = Depends(get_db)):
+def get_anomalies(
+    session_id: int,
+    limit: int = Query(default=200, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Return anomaly events for a session ordered by creation time.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate.
+    """
     q = db.execute(
         select(AnomalyEvent)
         .join(FeatureWindow)
         .where(FeatureWindow.session_id == session_id)
         .order_by(AnomalyEvent.created_at.asc())
+        .limit(limit)
+        .offset(offset)
     )
     return [r[0] for r in q.all()]
 

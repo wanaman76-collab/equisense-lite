@@ -108,6 +108,7 @@ describe('useLiveFeed', () => {
       useLiveFeed({ sessionId: 1, token: 'dev-token' }),
     )
     expect(result.current.connectionState).toBe<LiveConnectionState>('connecting')
+    expect(latestWs().url).toContain('/sessions/1/live?token=dev-token')
   })
 
   it('transitions to live on receiving samples', () => {
@@ -368,6 +369,20 @@ describe('useLiveFeed', () => {
     // A new socket should have been created
     expect(wsInstances).toHaveLength(2)
   })
+
+  it('keeps the same session id across reconnects', () => {
+    renderHook(() => useLiveFeed({ sessionId: 7, token: 'dev-token' }))
+
+    const firstWs = latestWs()
+    expect(firstWs.url).toContain('/sessions/7/live?token=dev-token')
+
+    act(() => firstWs.simulateClose())
+    act(() => { vi.advanceTimersByTime(1000) })
+
+    const secondWs = latestWs()
+    expect(wsInstances).toHaveLength(2)
+    expect(secondWs.url).toContain('/sessions/7/live?token=dev-token')
+  })
 })
 
 // ── LiveFeedPanel render tests ─────────────────────────────────────────────────
@@ -400,4 +415,3 @@ describe('LiveFeedPanel', () => {
     expect(container.textContent).toContain('Buffer:')
   })
 })
-
