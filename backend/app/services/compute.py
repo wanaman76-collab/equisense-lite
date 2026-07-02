@@ -180,27 +180,6 @@ def run_compute(
 
     baseline = _get_baseline(db, horse_id)
 
-    # ── 2. Batch-fetch readings within the effective trim window ──────────
-    all_rows = db.execute(
-        select(
-            SensorReading.ts_ms,
-            SensorReading.ax,
-            SensorReading.ay,
-            SensorReading.az,
-            SensorReading.gx,
-            SensorReading.gy,
-            SensorReading.gz,
-        )
-        .where(
-            SensorReading.session_id == session_id,
-            SensorReading.ts_ms >= effective_start,
-            SensorReading.ts_ms <= effective_end,
-        )
-        .order_by(SensorReading.ts_ms.asc())
-    ).all()
-
-    all_arr = np.array(all_rows, dtype=float) if all_rows else np.empty((0, 7))
-
     # Per-window accumulators
     cadence_vals: list[float] = []
     stride_var_vals: list[float] = []
@@ -215,14 +194,32 @@ def run_compute(
     created_windows = 0
 
     for s, e in ranges:
-        # ── 3. Slice the pre-fetched array for this window ────────────────
-        if all_arr.size:
-            mask = (all_arr[:, 0] >= s) & (all_arr[:, 0] < e)
-            arr = all_arr[mask]
-        else:
-            arr = np.empty((0, 7))
+        # ── 2. Fetch only this window's readings from the DB ──────────────
+        # Querying per-window keeps peak memory at O(window_size) regardless
+        # of total session length.  Both session_id and ts_ms are indexed so
+        # each query is fast.
+        win_rows = db.execute(
+            select(
+                SensorReading.ts_ms,
+                SensorReading.ax,
+                SensorReading.ay,
+                SensorReading.az,
+                SensorReading.gx,
+                SensorReading.gy,
+                SensorReading.gz,
+            )
+            .where(
+                SensorReading.session_id == session_id,
+                SensorReading.ts_ms >= s,
+                SensorReading.ts_ms < e,
+            )
+            .order_by(SensorReading.ts_ms.asc())
+        ).all()
+        arr = np.array(win_rows, dtype=float) if win_rows else np.empty((0, 7))
+        del win_rows  # free immediately — no longer needed
 
         feat = compute_features(arr)
+        del arr  # free array before next iteration
 
         # Upsert FeatureWindow
         existing_fw = db.execute(
@@ -244,18 +241,25 @@ def run_compute(
         fw.asymmetry_proxy = feat.get("asymmetry_proxy")
         fw.energy = feat.get("energy")
         fw.quality_flags = feat.get("quality_flags")
-        db.flush()
+        db.flush()  # assigns fw.id without holding a transaction open across the loop
 
-        # Collect summary statistics
-        if fw.cadence_spm is not None:
-            cadence_vals.append(float(fw.cadence_spm))
-        if fw.stride_var is not None:
-            stride_var_vals.append(float(fw.stride_var))
-        if fw.asymmetry_proxy is not None:
-            asym_vals.append(float(fw.asymmetry_proxy))
-        if fw.energy is not None:
-            energy_vals.append(float(fw.energy))
-        if fw.quality_flags is not None and "gap>200ms" in fw.quality_flags:
+        # Collect summary statistics (read attributes before expunge)
+        cadence_spm_val = fw.cadence_spm
+        stride_var_val = fw.stride_var
+        asym_val = fw.asymmetry_proxy
+        energy_val = fw.energy
+        quality_flags_val = fw.quality_flags
+        fw_id = fw.id
+
+        if cadence_spm_val is not None:
+            cadence_vals.append(float(cadence_spm_val))
+        if stride_var_val is not None:
+            stride_var_vals.append(float(stride_var_val))
+        if asym_val is not None:
+            asym_vals.append(float(asym_val))
+        if energy_val is not None:
+            energy_vals.append(float(energy_val))
+        if quality_flags_val is not None and "gap>200ms" in quality_flags_val:
             gap_windows += 1
         trot_conf_votes.append(str(feat.get("trot_confidence", "LOW")))
 
@@ -264,9 +268,9 @@ def run_compute(
         str_med, str_mad = baseline["stride_var"]
         asy_med, asy_mad = baseline["asymmetry_proxy"]
 
-        score_cad = _safe_score(fw.cadence_spm, cad_med, cad_mad)
-        score_str = _safe_score(fw.stride_var, str_med, str_mad)
-        score_asy = _safe_score(fw.asymmetry_proxy, asy_med, asy_mad)
+        score_cad = _safe_score(cadence_spm_val, cad_med, cad_mad)
+        score_str = _safe_score(stride_var_val, str_med, str_mad)
+        score_asy = _safe_score(asym_val, asy_med, asy_mad)
 
         fused_score = float(max(score_cad, score_str, score_asy))
         sev = severity_from_score(fused_score)
@@ -288,7 +292,7 @@ def run_compute(
         }
 
         # Upsert AnomalyEvent
-        existing_anom = db.execute(select(AnomalyEvent).where(AnomalyEvent.window_id == fw.id)).scalar_one_or_none()
+        existing_anom = db.execute(select(AnomalyEvent).where(AnomalyEvent.window_id == fw_id)).scalar_one_or_none()
         if existing_anom:
             existing_anom.method = AnomalyMethod.FUSION
             existing_anom.score = fused_score
@@ -297,7 +301,7 @@ def run_compute(
         else:
             db.add(
                 AnomalyEvent(
-                    window_id=fw.id,
+                    window_id=fw_id,
                     method=AnomalyMethod.FUSION,
                     score=fused_score,
                     severity=sev,
@@ -305,9 +309,12 @@ def run_compute(
                 )
             )
 
-        created_windows += 1
+        # Commit and expunge after each window so the ORM identity map stays
+        # bounded regardless of how many windows the session contains.
+        db.commit()
+        db.expunge_all()
 
-    db.commit()
+        created_windows += 1
 
     # Build aggregate report
     cadence_arr = np.array(cadence_vals, dtype=float)
