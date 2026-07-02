@@ -216,10 +216,13 @@ def run_compute(
             .order_by(SensorReading.ts_ms.asc())
         ).all()
         arr = np.array(win_rows, dtype=float) if win_rows else np.empty((0, 7))
-        del win_rows  # free immediately — no longer needed
+        # Explicit del keeps peak RSS low: CPython's reference counting frees
+        # the raw list immediately rather than waiting until end of iteration.
+        del win_rows
 
         feat = compute_features(arr)
-        del arr  # free array before next iteration
+        # Same reasoning: free the numpy array before the heavier upsert work below.
+        del arr
 
         # Upsert FeatureWindow
         existing_fw = db.execute(

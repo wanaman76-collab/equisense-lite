@@ -67,6 +67,11 @@ def list_sessions(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
+    """List sessions ordered by most-recent first.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate through large
+    result sets and avoid loading the full table into memory at once.
+    """
     q = db.execute(select(SessionModel).order_by(SessionModel.started_at.desc()).limit(limit).offset(offset))
     return [r[0] for r in q.all()]
 
@@ -83,6 +88,10 @@ def get_features(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
+    """Return feature windows for a session ordered by time.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate.
+    """
     q = db.execute(
         select(FeatureWindow)
         .where(FeatureWindow.session_id == session_id)
@@ -100,6 +109,10 @@ def get_anomalies(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
+    """Return anomaly events for a session ordered by creation time.
+
+    Use *limit* (max 1000, default 200) and *offset* to paginate.
+    """
     q = db.execute(
         select(AnomalyEvent)
         .join(FeatureWindow)
