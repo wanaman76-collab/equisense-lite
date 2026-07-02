@@ -8,4 +8,10 @@ describe('App', () => {
     const { getByText } = render(<App />)
     expect(getByText(/EquiSense Lite/i)).toBeTruthy()
   })
+
+  it('renders watch existing session controls', () => {
+    const { getAllByText, getAllByPlaceholderText } = render(<App />)
+    expect(getAllByText(/Watch Session ID/i).length).toBeGreaterThan(0)
+    expect(getAllByPlaceholderText(/Session ID/i).length).toBeGreaterThan(0)
+  })
 })

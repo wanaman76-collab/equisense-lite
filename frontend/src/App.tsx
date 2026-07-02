@@ -33,6 +33,8 @@ export default function App() {
   const [horseId, setHorseId] = useState(1)
   const [newHorseName, setNewHorseName] = useState('Blaze')
   const [sessionId, setSessionId] = useState<number | undefined>()
+  const [watchedSessionId, setWatchedSessionId] = useState<number | undefined>()
+  const [watchSessionInput, setWatchSessionInput] = useState('')
   const [sessions, setSessions] = useState<SessionOut[]>([])
   const [selectedSessionId, setSelectedSessionId] = useState<number | undefined>()
   const [features, setFeatures] = useState<FeatureWindowOut[]>([])
@@ -69,6 +71,8 @@ export default function App() {
     try {
       const sess = await startSession(token, horseId, 'arena')
       setSessionId(sess.id)
+      setWatchedSessionId(sess.id)
+      setWatchSessionInput(String(sess.id))
       setComputeResult(null)
       setStatus(`Session #${sess.id} started.`)
     } catch (e) {
@@ -128,6 +132,26 @@ export default function App() {
     } catch (e) {
       handleError(e)
     }
+  }
+
+  function setWatchedSession(id: number) {
+    setWatchedSessionId(id)
+    setWatchSessionInput(String(id))
+    setStatus(`Watching live session #${id}.`)
+  }
+
+  function handleWatchSessionSelect(id: number | undefined) {
+    if (!id) return
+    setWatchedSession(id)
+  }
+
+  function handleWatchSession() {
+    const parsed = parseInt(watchSessionInput, 10)
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setStatus('Enter a valid existing session ID to watch.', false)
+      return
+    }
+    setWatchedSession(parsed)
   }
 
   async function handleLoadSessionDetails(id: number) {
@@ -226,6 +250,8 @@ export default function App() {
       const sess = await startSession(token, horseId, 'arena')
       const sid = sess.id
       setSessionId(sid)
+      setWatchedSessionId(sid)
+      setWatchSessionInput(String(sid))
       setDemoLastSessionId(sid)
       setComputeResult(null)
       setSelectedSessionId(undefined)
@@ -280,9 +306,16 @@ export default function App() {
         token={token}
         horseId={horseId}
         sessionId={sessionId}
+        watchedSessionId={watchedSessionId}
+        watchSessionInput={watchSessionInput}
+        sessions={sessions}
         demoBusy={demoBusy}
         baselineRecomputeBusy={baselineRecomputeBusy}
         onHorseIdChange={setHorseId}
+        onWatchSessionInputChange={setWatchSessionInput}
+        onWatchSessionSelect={handleWatchSessionSelect}
+        onWatchSession={handleWatchSession}
+        onRefreshSessions={handleListSessions}
         onStart={handleStart}
         onIngestFake={handleIngestFake}
         onCompute={handleCompute}
@@ -291,8 +324,8 @@ export default function App() {
         onRecomputeBaseline={handleRecomputeBaseline}
       />
 
-      {sessionId !== undefined && (
-        <LiveFeedPanel sessionId={sessionId} token={token} />
+      {watchedSessionId !== undefined && (
+        <LiveFeedPanel sessionId={watchedSessionId} token={token} />
       )}
 
       {computeResult && (
