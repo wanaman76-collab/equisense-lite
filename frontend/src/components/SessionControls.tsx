@@ -63,7 +63,14 @@ export function SessionControls({
         <select
           style={{ ...inputStyle, width: 180 }}
           value={watchedSessionId?.toString() ?? ''}
-          onChange={(e) => onWatchSessionSelect(e.target.value ? parseInt(e.target.value, 10) : undefined)}
+          onChange={(e) => {
+            if (!e.target.value) {
+              onWatchSessionSelect(undefined)
+              return
+            }
+            const parsed = parseInt(e.target.value, 10)
+            onWatchSessionSelect(Number.isNaN(parsed) ? undefined : parsed)
+          }}
         >
           <option value="">Select session to watch</option>
           {sessions.map((s) => (

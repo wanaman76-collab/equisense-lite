@@ -134,24 +134,29 @@ export default function App() {
     }
   }
 
-  function setWatchedSession(id: number) {
+  function watchSessionById(id: number) {
     setWatchedSessionId(id)
     setWatchSessionInput(String(id))
     setStatus(`Watching live session #${id}.`)
   }
 
   function handleWatchSessionSelect(id: number | undefined) {
-    if (!id) return
-    setWatchedSession(id)
+    if (!id) {
+      setWatchedSessionId(undefined)
+      setWatchSessionInput('')
+      setStatus('Live watch session cleared.')
+      return
+    }
+    watchSessionById(id)
   }
 
   function handleWatchSession() {
     const parsed = parseInt(watchSessionInput, 10)
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-      setStatus('Enter a valid existing session ID to watch.', false)
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      setStatus('Enter a valid positive session ID to watch.', false)
       return
     }
-    setWatchedSession(parsed)
+    watchSessionById(parsed)
   }
 
   async function handleLoadSessionDetails(id: number) {
